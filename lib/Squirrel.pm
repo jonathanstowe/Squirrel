@@ -58,7 +58,7 @@ class Squirrel {
     has Bool $.debug = False;
 
     method debug(*@args) {
-        warn "[{ callframe(1).code.?name }] ", @args;
+        note "[{ callframe(2).code.?name }] ", @args;
     }
 
     role LiteralValue { }
@@ -108,7 +108,7 @@ class Squirrel {
 
         my ($sql, @bind) = self.build-insert($data);
 
-        $sql = (self.sqlcase('insert into'), $table, $sql).join(" ");
+        $sql = (self.sqlcase('insert into'), $table-name, $sql).join(" ");
 
         if %options<returning> -> $returning {
             my ($s, @b) = self.returning($returning);
@@ -152,6 +152,8 @@ class Squirrel {
 
     multi method build-insert(@data) {
 
+        self.debug("Array");
+
         if $!bindtype eq 'columns' {
             X::InvalidBindType.new(message => "can't do 'columns' bindtype when called with arrayref").throw;
         }
@@ -160,13 +162,14 @@ class Squirrel {
         my @all-bind;
 
         for @data -> $value {
-            my ($values, @bind) = self.insert-value(Any, $value);
+            my ($values, @bind) = self.insert-value(Str, $value);
             @values.append: $values;
             @all-bind.append: @bind;
         }
 
         my $sql = self.sqlcase('values') ~ ' ( ' ~ @values.join(", ") ~ ' )';
-        ($sql, @all-bind);
+        self.debug("returning ($sql, { @all-bind.perl }");
+        flat ($sql, @all-bind);
     }
 
 =begin later
@@ -200,7 +203,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         ($sql, @all-bind);
     }
 
-    proto sub insert-value(|c) { * }
+    proto method insert-value(|c) { * }
 
     multi method insert-value(Pair $p) {
         samewith $p.key, $p.value;
@@ -229,7 +232,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
     }
 
     multi method insert-value(Str $column, $value) {
-        (($value), Empty);
+        (($value),);
     }
 
     method update(Str $table, %data, $where?, *%options) {
