@@ -307,13 +307,14 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     proto method select(|c) { * }
 
-    multi method select(Str $table, @fields,  $where?, $order?) {
-        my $f = @fields.mao(-> $v { self.quote($v) }).join(', ');
-        samewith $table, $f, $where, $order;
+    multi method select(Str $table, @fields,  :$where, :$order) {
+        my $f = @fields.map(-> $v { self.quote($v) }).join(', ');
+        samewith $table, $f, :$where, :$order;
     }
 
-    multi method select(Str $table, $fields = '*', $where?, $order?) {
-        my ($where-sql, @bind) = self.where($where, $order);
+    multi method select(Str $table, $fields = '*', :$where, :$order) {
+        my ($where-sql, @bind) = self.where($where, $order).flat;
+        self.debug("Got bind values { @bind.perl }");
         my $sql = join(' ', self.sqlcase('select'), $fields, self.sqlcase('from'),   $table) ~ $where-sql;
         ($sql, @bind);
     }
@@ -323,7 +324,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 #======================================================================
 
 
-    method delete(Str $table, $where) {
+    method delete(Str $table, :$where) {
         my $table-name = self.table($table);
 
         my ($where-sql, @bind) = self.where($where);
@@ -349,8 +350,9 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
     }
 
     multi method where($where, $order ) {
-        my ($sql, @bind) = samewith $where;
-        my ($order-sql, @order-bind) = self.order-by($order);
+        my ($sql, @bind) = (samewith $where).flat;
+        self.debug("got bind values { @bind.perl } ");
+        my ($order-sql, @order-bind) = self.order-by($order).flat;
         $sql ~= $order-sql;
         @bind.append: @order-bind;
         ($sql, @bind);
@@ -388,7 +390,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         self.join-sql-clauses($logic, @sql-clauses, @all-bind);
     }
 
-    multi method xbuild-where(:$logic, *%where) {
+    multi method build-where(:$logic, *%where) {
         self.debug("slurpy");
         samewith %where, :$logic;
     }
