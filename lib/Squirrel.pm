@@ -327,7 +327,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
     method delete(Str $table, :$where) {
         my $table-name = self.table($table);
 
-        my ($where-sql, @bind) = self.where($where);
+        my ($where-sql, @bind) = self.where($where).flat;
         my $sql = self.sqlcase('delete from') ~ " $table-name " ~ $where-sql;
 
         ($sql, @bind);
