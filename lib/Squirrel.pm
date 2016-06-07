@@ -307,24 +307,27 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     proto method select(|c) { * }
 
-    multi method select(Str $table, @fields,  :$where, :$order) {
+    multi method select($table, @fields,  :$where, :$order) {
         my $f = @fields.map(-> $v { self.quote($v) }).join(', ');
         samewith $table, $f, :$where, :$order;
     }
 
-    multi method select(Str $table, $fields = '*', :$where, :$order) {
+
+    multi method select($table, $fields = '*', :$where, :$order) {
+        my $table-name = self.table($table);
         my ($where-sql, @bind) = self.where($where, $order).flat;
         self.debug("Got bind values { @bind.perl }");
-        my $sql = join(' ', self.sqlcase('select'), $fields, self.sqlcase('from'),   $table) ~ $where-sql;
+        my $sql = join(' ', self.sqlcase('select'), $fields, self.sqlcase('from'),   $table-name) ~ $where-sql;
         ($sql, @bind);
     }
+
 
 #======================================================================
 # DELETE
 #======================================================================
 
 
-    method delete(Str $table, :$where) {
+    method delete($table, :$where) {
         my $table-name = self.table($table);
 
         my ($where-sql, @bind) = self.where($where).flat;
@@ -343,7 +346,11 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 # Finally, a separate routine just to handle WHERE clauses
     proto method where(|c) { * }
 
-    multi method where($where) {
+    multi method where(Any:U $where) {
+        ('', ());
+    }
+
+    multi method where(Any:D $where) {
         my ($sql, @bind) = self.build-where($where).flat;
         $sql = $sql ?? self.sqlcase(' where ') ~ "( $sql )" !! '';
         ($sql, @bind);
@@ -376,7 +383,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
                     self.build-where($el);
                 }
                 when Associative|Pair {
-                    self.build-where($el, 'and');
+                    self.build-where($el, logic => 'and');
                 }
                 when Str {
                     self.build-when($el => @clauses.shift);
@@ -556,12 +563,12 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
     proto method where-op-ANDOR(|c) { * }
 
     multi method where-op-ANDOR(Str $op,  @value) {
-        self.build-where(@value, $op);
+        self.build-where(@value, logic => $op);
     }
 
     multi method where-op-ANDOR(Str $op where m:i/^or/, %value) {
         my @value = %value.pairs.sort(*.key);
-        self.build-where(@value, $op);
+        self.build-where(@value, logic => $op);
     }
 
     multi method where-op-ANDOR(Str $op where  * !~~ m:i/^or/, %value) {
@@ -814,6 +821,7 @@ sub _where_UNDEF {
     }
 
     method open-outer-paren(Str $sql is copy) {
+        self.debug("got $sql");
         while $sql ~~ /^ \s* \( $<inner>=(.*) \) \s* $/ -> $inner {
             if ~$inner<inner> ~~ /\)/ {
                 # do something clever with extract_bracketed
@@ -880,7 +888,7 @@ sub _where_UNDEF {
             }
         }
         else {
-            X::InvalidDirectio.new.throw;
+            X::InvalidDirection.new.throw;
         }
 
         @ret;
