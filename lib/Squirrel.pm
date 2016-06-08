@@ -355,13 +355,13 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     multi method where(Any:D $where) {
         my ($sql, @bind) = self.build-where($where).flat;
+        self.debug("got bind values { @bind.perl } ");
         $sql = $sql ?? self.sqlcase(' where ') ~ "( $sql )" !! '';
         ($sql, @bind);
     }
 
     multi method where($where, $order ) {
         my ($sql, @bind) = (samewith $where).flat;
-        self.debug("got bind values { @bind.perl } ");
         my ($order-sql, @order-bind) = self.order-by($order).flat;
         $sql ~= $order-sql;
         @bind.append: @order-bind;
@@ -417,7 +417,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
         for %where.pairs.sort(*.key) -> Pair $pair {
             self.debug("got pair { $pair.perl } ");
-            my ( $sql, @bind ) = self.build-where($pair, :$logic);
+            my ( $sql, @bind ) = self.build-where($pair, :$logic).flat;
             @sql-clauses.append: $sql;
             @all-bind.append: @bind;
         }
