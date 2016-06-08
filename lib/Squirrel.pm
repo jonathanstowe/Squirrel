@@ -370,8 +370,11 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     subset Logic of Str where { $_.uc ~~ "OR"|"AND" };
 
-    multi method build-where(@where, Logic :$logic = $!logic) {
+    multi method build-where(@where, Any:U $logic?) {
+        (samewith @where, :$!logic).flat;
+    }
 
+    multi method build-where(@where, Logic :$logic = $!logic) {
         my @clauses = @where;
 
         my (@sql-clauses, @all-bind);
@@ -380,13 +383,13 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
             my ($sql, @bind) = do given $el {
                 when Positional {
-                    self.build-where($el);
+                    self.build-where($el).flat;
                 }
                 when Associative|Pair {
-                    self.build-where($el, logic => 'and');
+                    self.build-where($el, logic => 'and').flat;
                 }
                 when Str {
-                    self.build-when($el => @clauses.shift);
+                    self.build-when($el => @clauses.shift).flat;
                 }
             }
             if $sql {
@@ -394,6 +397,8 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
                 @all-bind.append: @bind;
             }
         }
+
+        self.debug("got bind { @all-bind }");
         self.join-sql-clauses($logic, @sql-clauses, @all-bind);
     }
 
@@ -422,28 +427,32 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         ($s, @b);
     }
 
-    multi method build-where(Pair $p ( Str :$key, :$value ), :$logic) {
+    multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric ), :$logic) {
         flat ( "$key = ?", ($value,));
     }
 
-    multi method build-where(Pair $p ( :$key, :@value is copy where *.elems > 0)) {
-        my $op = @value[0].defined && @value[0] ~~ m:i/^\-[AND|OR]$/ ?? @value.shift !! '';
-        my @distributed = @value.map(-> $v { $key => $v });
+    multi method build-where(Pair $p ( :$key, :@value where *.elems > 0)) {
+        my @values = @value;
+        self.debug("pair with values { @values.perl }");
+        my $op = @values[0].defined && @values[0] ~~ m:i/^\-[AND|OR]$/ ?? @values.shift !! '';
+        my @distributed = @values.map(-> $v { $key => $v });
 
         if $op {
+            self.debug('adding op');
             @distributed.prepend: $op;
         }
-        my $logic = $op ?? $op.substr(1) !! '';
 
-        self.build-where(@distributed, $logic);
+        my $logic = $op ?? $op.substr(1) !! '';
+        self.debug("redistributing array with '$logic' with a { @distributed.perl }");
+        self.build-where(@distributed, :$logic).flat;
     }
 
-    multi method build-where(Pair $p ( :$key, :@value where *.elems == 0)) {
+    multi method build-where(Pair $p ( :$key, :@value where *.elems == 0), :$logic) {
         ($!sqlfalse, ());
     }
 
 
-    multi method build-where(Pair $p ( :$key, :%value), Str $logic = 'and') {
+    multi method build-where(Pair $p ( :$key, :%value), Str :$logic = 'and') {
         my $*NESTED-FUNC-LHS = $*NESTED-FUNC-LHS // $key;
         my ($all-sql, @all-bind);
 
