@@ -243,8 +243,8 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         my ( @set, @all-bind);
 
         for %data.pairs.sort(*.key) -> $p {
-            my ( @s, @b) = self.build-update($p);
-            @set.append: @s;
+            my ( $s, @b) = self.build-update($p).flat;
+            @set.append: $s;
             @all-bind.append: @b;
         }
         self.debug("got @set { @set.perl }");
@@ -268,13 +268,15 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
     proto method build-update(|c) { * }
 
     multi method build-update(Pair $p) {
-        samewith $p.key, $p.value.list;
+        (samewith $p.key, $p.value.list).flat;
     }
+
+
 
     multi method build-update(Str $key, @values) {
         my ( @set, @all-bind);
         my $label = self.quote($key);
-        if $!array-datatypes {
+        if @values.elems == 1 or $!array-datatypes {
             @set.append: "$label = ?";
             @all-bind.append: self.apply-bindtype($key, @values);
         }
@@ -284,7 +286,8 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
             @set.append: "$label = $sql";
             @all-bind.append: @bind;
         }
-        flat (@set, @all-bind);
+        self.debug("bind { @all-bind.perl }");
+        (@set, @all-bind);
     }
 
     class X::InvalidOperator is Exception {
@@ -402,17 +405,18 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         self.join-sql-clauses($logic, @sql-clauses, @all-bind);
     }
 
-    multi method build-where(:$logic, *%where) {
+    multi method build-where(Str :$logic, *%where) {
         self.debug("slurpy");
         samewith %where, :$logic;
     }
-    multi method build-where(%where, :$logic) {
+
+    multi method build-where(%where, Str :$logic) {
         my (@sql-clauses, @all-bind);
 
-        self.debug("hash");
+        self.debug("hash -> { %where.perl } ");
 
-        for %where.pairs.sort(*.key) -> $pair {
-            self.debug("got pair { $pair.perl }");
+        for %where.pairs.sort(*.key) -> Pair $pair {
+            self.debug("got pair { $pair.perl } ");
             my ( $sql, @bind ) = self.build-where($pair, :$logic);
             @sql-clauses.append: $sql;
             @all-bind.append: @bind;
@@ -420,18 +424,18 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         self.join-sql-clauses('and', @sql-clauses, @all-bind);
     }
 
-    multi method build-where(Pair $p ( Str :$key where * ~~ /^\-./, :$value), :$logic) {
+    multi method build-where(Pair $p ( Str :$key where * ~~ /^\-./, :$value), Str :$logic) {
         my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
         my ( $s, @b) = self.where-unary-op($op, $value);
         $s = "($s)" unless self.is-unary-operator($op) || self.is-nested-func-lhs($key);
         ($s, @b);
     }
 
-    multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric ), :$logic) {
+    multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric ), Str :$logic) {
         flat ( "$key = ?", ($value,));
     }
 
-    multi method build-where(Pair $p ( :$key, :@value where *.elems > 0)) {
+    multi method build-where(Pair $p ( :$key, :@value where *.elems > 0), Str :$logic is copy) {
         my @values = @value;
         self.debug("pair with values { @values.perl }");
         my $op = @values[0].defined && @values[0] ~~ m:i/^\-[AND|OR]$/ ?? @values.shift !! '';
@@ -442,24 +446,29 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
             @distributed.prepend: $op;
         }
 
-        my $logic = $op ?? $op.substr(1) !! '';
+        $logic = $op ?? $op.substr(1) !! '';
         self.debug("redistributing array with '$logic' with a { @distributed.perl }");
         self.build-where(@distributed, :$logic).flat;
     }
 
-    multi method build-where(Pair $p ( :$key, :@value where *.elems == 0), :$logic) {
+    multi method build-where(Pair $p ( :$key, :@value where *.elems == 0), Str :$logic) {
         ($!sqlfalse, ());
+    }
+
+    multi method build-where(Pair $p ( :$key, Any:U :$value), Str :$logic) {
+        (self.quote($key) ~ self.sqlcase(" is null"), ());
     }
 
 
     multi method build-where(Pair $p ( :$key, :%value), Str :$logic = 'and') {
+        self.debug("Got a pair with a hash value");
         my $*NESTED-FUNC-LHS = $*NESTED-FUNC-LHS // $key;
         my ($all-sql, @all-bind);
 
         for %value.pairs.sort(*.key) -> $ (:key($orig-op), :value($val)) {
             my ($sql, @bind);
             my $op = $orig-op.subst(/^\-/,'').trim.subst(/\s+/, ' ');
-            self.assert-pass-inject-guard($op);
+            self.assert-pass-injection-guard($op);
             $op ~~ s:i/^is_not/IS NOT/;
             $op ~~ s:i/^not_/NOT /;
 
@@ -497,7 +506,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
                         $sql = self.quote($key) ~ self.sqlcase(" $is null");
                     }
                     default {
-                        ($sql, @bind) = self.where-unary-op($op, $val);
+                        ($sql, @bind) = self.where-unary-op($op, $val).flat;
                         $sql = join(' ', self.convert(self.quote($key)), $*NESTED-FUNC-LHS && $*NESTED-FUNC-LHS eq $key ?? $sql !! "($sql)");
                     }
                 }
@@ -552,16 +561,16 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         self.assert-pass-injection-guard($op);
 
         my ($sql, @bind) = do given $rhs {
-            when Str {
+            when Stringy|Numeric {
                 if $*NESTED-FUNC-LHS {
-
+                    (self.convert('?'), self.apply-bindtype($*NESTED-FUNC-LHS, $rhs)).flat;
                 }
                 else {
-                    (self.convert('?'), self.apply-bindtype($*NESTED-FUNC-LHS, $rhs));
+                    (self.convert('?'), self.apply-bindtype($*NESTED-FUNC-LHS, $rhs)).flat;
                 }
             }
             default {
-                self.build-where($rhs);
+                self.build-where($rhs).flat;
             }
         }
 
@@ -1001,8 +1010,9 @@ sub _quote {
     proto method join-sql-clauses(|c) { * }
 
     multi method join-sql-clauses(Str:D $logic, @clauses where *.elems > 1, @bind) {
+        self.debug("joining { @clauses.perl }");
         my $join = " " ~ self.sqlcase($logic) ~ " ";
-        my $sql = '( ' ~ @clauses.join($join) ~ ' )';
+        my $sql = '( ' ~ @clauses.map({ "( $_ )" }).join($join) ~ ' )';
         ($sql, @bind);
     }
     multi method join-sql-clauses(Str:D $logic, @clauses where *.elems == 1, @bind) {

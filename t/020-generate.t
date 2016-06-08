@@ -60,7 +60,7 @@ my @tests =
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => { '!=', 'boom' }, }),
+              args   => \('test', '*', where => { a =>  '!=' => 'boom' }),
               stmt   => 'SELECT * FROM test WHERE ( a != ? )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` != ? )',
               bind   => ('boom')
@@ -74,7 +74,7 @@ my @tests =
       },
       {
               func   => 'update',
-              args   => \('test', {a => 'boom'}, where => { a => {'!=', "bang" }} ),
+              args   => \('test', {a => 'boom'}, where => { a => {'!=' => "bang" }} ),
               stmt   => 'UPDATE test SET a = ? WHERE ( a != ? )',
               stmt_q => 'UPDATE `test` SET `a` = ? WHERE ( `a` != ? )',
               bind   => ('boom', 'bang')
@@ -580,7 +580,7 @@ my @tests =
 
 my $s = Squirrel.new(:debug);
 
-for @tests -> $test {
+for @tests[3 .. 10] -> $test {
     my $args = $test<args>;
     my @res;
     diag $test<stmt>;
@@ -589,6 +589,7 @@ for @tests -> $test {
         @res = $s."$meth"(|$args);
     #    }, "$meth";
     diag @res[0];
+    diag @res[1];
     is @res[0], $test<stmt>, "$meth SQL looks good";
 }
 
