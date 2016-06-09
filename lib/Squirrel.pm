@@ -108,7 +108,7 @@ class Squirrel {
     method insert($table, $data, *%options) {
         my $table-name   = self.table($table);
 
-        my ($sql, @bind) = self.build-insert($data);
+        my ($sql, @bind) = self.build-insert($data).flat;
 
         $sql = (self.sqlcase('insert into'), $table-name, $sql).join(" ");
 
@@ -134,18 +134,14 @@ class Squirrel {
     proto method build-insert(|c) { * }
 
     multi method build-insert(%data) {
+        self.debug('Hash');
 
-        my @fields = %data.keys.sort;
+        my @fields = %data.keys.sort.map( -> $v { self.quote($v) });
 
-        my ($sql, @bind) = self.insert-values(%data);
+        my ($sql, @bind) = self.insert-values(%data).flat;
 
-        for @fields <-> $field {
-            $field = self.quote($field);
-        }
-
-        $sql = '( ' ~ @fields.join(', ') ~ ') ' ~ $sql;
-
-        flat ($sql, @bind);
+        $sql = '(' ~ @fields.join(', ') ~ ') ' ~ $sql;
+        ($sql, @bind);
     }
 
     class X::InvalidBindType is Exception {
@@ -164,28 +160,22 @@ class Squirrel {
         my @all-bind;
 
         for @data -> $value {
-            my ($values, @bind) = self.insert-value(Str, $value);
+            my ($values, @bind) = self.insert-value(Str, $value).flat;
             @values.append: $values;
             @all-bind.append: @bind;
         }
 
-        my $sql = self.sqlcase('values') ~ ' ( ' ~ @values.join(", ") ~ ' )';
+        my $sql = self.sqlcase('values') ~ ' (' ~ @values.join(", ") ~ ')';
         self.debug("returning ($sql, { @all-bind.perl }");
         flat ($sql, @all-bind);
     }
 
-=begin later
 
-# 
-sub _insert_ARRAYREFREF { # literal SQL with bind
-  my ($self, $data) = @_;
-
-  my ($sql, @bind) = @$($data);
-  $self._assert_bindval_matches_bindtype(@bind);
-
-  return ($sql, @bind);
-}
-=end later
+    multi method build-insert(Capture $data) {
+        my ( $sql, @bind ) = $data.list.flat;
+        self.assert-bindval-matches-bindtype(@bind);
+        ($sql, @bind);
+    }
 
 
     multi method build-insert(Str $data) {
@@ -201,17 +191,19 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
             @values.append: $values;
             @all-bind.append: @bind;
         }
-        my $sql = self.sqlcase('values') ~ ' ( ' ~ @values.join(", ") ~ ' )';
+        my $sql = self.sqlcase('values') ~ ' (' ~ @values.join(", ") ~ ')';
         flat ($sql, @all-bind);
     }
 
     proto method insert-value(|c) { * }
 
     multi method insert-value(Pair $p) {
-        samewith $p.key, $p.value;
+        self.debug("pair");
+        (samewith $p.key, $p.value).flat;
     }
 
     multi method insert-value(Str $column, @value) {
+        self.debug("array value { @value.perl }");
         my (@values, @all-bind);
         if $!array-datatypes {
             @values.append: '?';
@@ -223,18 +215,27 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
             @values.append: $sql;
             @all-bind.append: @bind;
         }
-        flat (@values.join(', '), @all-bind);
+        (@values.join(', '), @all-bind);
     }
 
     multi method insert-value(Str $column, %value) {
+        self.debug("hash value");
         my (@values, @all-bind);
         @values.append: '?';
         @all-bind.append: self.apply-bindtype($column, %value);
-        flat (@values.join(', '), @all-bind);
+        (@values.join(', '), @all-bind);
     }
 
     multi method insert-value(Str $column, $value) {
-        flat (($value),);
+        self.debug("plain value");
+        (('?'), ($value));
+    }
+
+    # this is the "special references" in P5
+    multi method insert-value(Str $column, Capture $value) {
+        self.debug("capture");
+        my ($s, @bind) = $value.list.flat;
+        ($s, @bind);
     }
 
     method update(Str $table, %data, :$where, *%options) {
