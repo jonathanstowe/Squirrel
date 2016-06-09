@@ -590,7 +590,8 @@ for @tests[10..20] -> $test {
     #    }, "$meth";
     diag @res[0];
     is @res[0], $test<stmt>, "$meth SQL looks good";
-    is-deeply @res[1].Array, $test<bind>.Array, "bind values ok";
+    my @bind = $test<bind>.map(-> $v { my $t = val($v); given $t { when Int { $_.Int }; when Num { $_.Num }; default { $_.Str }}});
+    is-deeply @res[1].Array, @bind.Array, "bind values ok";
 }
 
 
