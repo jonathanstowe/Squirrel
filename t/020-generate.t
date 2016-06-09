@@ -127,10 +127,10 @@ my @tests =
       },
       {
               func   => 'insert',
-              args   => ('test', (qw/1 2 3 4 5/, Any)),
+              args   => \('test', (1, 2, 3, 4, 5, Any)),
               stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?, ?)',
               stmt_q => 'INSERT INTO `test` VALUES (?, ?, ?, ?, ?, ?)',
-              bind   => (qw/1 2 3 4 5/, Any),
+              bind   => (1, 2,3,4,5, Any),
       },
       {
               func   => 'update',
@@ -590,7 +590,7 @@ for @tests[10..20] -> $test {
     #    }, "$meth";
     diag @res[0];
     is @res[0], $test<stmt>, "$meth SQL looks good";
-    my @bind = $test<bind>.map(-> $v { my $t = val($v); given $t { when Int { $_.Int }; when Num { $_.Num }; default { $_.Str }}});
+    my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! val($v); given $t { when Int { $_.Int }; when Num { $_.Num }; default { $_.Str }}}});
     is-deeply @res[1].Array, @bind.Array, "bind values ok";
 }
 

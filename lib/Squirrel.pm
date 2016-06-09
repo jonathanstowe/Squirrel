@@ -470,9 +470,10 @@ class Squirrel {
     # TODO: this is mostly so that P5 code that looks like a hash but makes a Block works
     # It's probably wrong because the intent is for it to be a pair
     multi method build-where(Pair $p (:$key, :&value ), Str :$logic) {
-        my ( $op, @vals) = value().flat;
-        my ( $sql, @bind) = self.where-field-op($key, $op, @vals).flat;
-        ($sql, @bind);
+        self.debug("got code value - will explode");
+        my $val = value().hash;
+        self.debug("exploded to { $val.perl }");
+        (samewith $key => $val, :$logic).flat;
     }
 
 
