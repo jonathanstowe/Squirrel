@@ -334,7 +334,7 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
         my $table-name = self.table($table);
 
         my ($where-sql, @bind) = self.where($where).flat;
-        my $sql = self.sqlcase('delete from') ~ " $table-name " ~ $where-sql;
+        my $sql = self.sqlcase('delete from') ~ " $table-name" ~ $where-sql;
 
         ($sql, @bind);
     }
@@ -457,6 +457,21 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     multi method build-where(Pair $p ( :$key, Any:U :$value), Str :$logic) {
         (self.quote($key) ~ self.sqlcase(" is null"), ());
+    }
+
+    # TODO: nested captures and named parts
+    multi method build-where(Pair $p ( :$key, Capture :$value), Str :$logic) {
+        my ( $sql, @bind ) = $value.list.flat;
+        $sql = self.quote($key) ~ " $sql";
+        ($sql, @bind);
+    }
+
+    # TODO: this is mostly so that P5 code that looks like a hash but makes a Block works
+    # It's probably wrong because the intent is for it to be a pair
+    multi method build-where(Pair $p (:$key, :&value ), Str :$logic) {
+        my ( $op, @vals) = value().flat;
+        my ( $sql, @bind) = self.where-field-op($key, $op, @vals).flat;
+        ($sql, @bind);
     }
 
 
@@ -649,7 +664,8 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
 
     proto method where-field-op(|c) { * }
 
-    multi method where-field-op(Str $key, Str $op, @values is copy where *.elems > 0) {
+    multi method where-field-op(Str $key, Str $op, @vals where *.elems > 0) {
+        my @values  = @vals;
         my $logic;
         if @values[0].defined && @values[0] ~~ m:i/^ \- $<logic>=( AND|OR ) $/ {
             $logic = $/<logic>.Str.uc;
@@ -786,6 +802,10 @@ sub _where_UNDEF {
 
     proto method where-field-IN(|c) { * }
 
+    multi method where-field-IN(Str $key, Str $op, *@values) {
+        (samewith $key, $op, @values).flat;
+    }
+
     multi method where-field-IN(Str $key, Str $op is copy, @values where *.elems > 0) {
         my $label       = self.convert($key, :quote);
         my $placeholder = self.convert('?');
@@ -829,7 +849,7 @@ sub _where_UNDEF {
         ("$label $op ( $sql )", Empty);
     }
 
-    multi method where-field-in(Str $key, Str $op is copy,ArrayLiteral $values ) {
+    multi method where-field-IN(Str $key, Str $op is copy,ArrayLiteral $values ) {
         my $label       = self.convert($key, :quote);
         $op             = self.sqlcase($op);
         my ( $sql, @bind) = $values.list;

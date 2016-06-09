@@ -580,7 +580,7 @@ my @tests =
 
 my $s = Squirrel.new(:debug);
 
-for @tests[3 .. 10] -> $test {
+for @tests[10..20] -> $test {
     my $args = $test<args>;
     my @res;
     diag $test<stmt>;
@@ -589,8 +589,8 @@ for @tests[3 .. 10] -> $test {
         @res = $s."$meth"(|$args);
     #    }, "$meth";
     diag @res[0];
-    diag @res[1];
     is @res[0], $test<stmt>, "$meth SQL looks good";
+    is-deeply @res[1].Array, $test<bind>.Array, "bind values ok";
 }
 
 
