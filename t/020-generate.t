@@ -173,7 +173,7 @@ my @tests =
               args   => ('test.table', {one => 2, three => 4, five => 6} ),
               stmt   => 'INSERT INTO test.table (five, one, three) VALUES (?, ?, ?)',
               stmt_q => 'INSERT INTO `test`.`table` (`five`, `one`, `three`) VALUES (?, ?, ?)',
-              bind   => (('five', 6), ('one', 2), ('three', 4)),  # alpha order, man...
+              bind   => (('five', 6), ('one', 2), ('three', 4)),
       },
       {
               func   => 'select',
@@ -181,7 +181,7 @@ my @tests =
               args   => \('test.table', (qw/one two three/), where => {one => 2, three => 4, five => 6} ),
               stmt   => 'select one, two, three from test.table where ( five = ? and one = ? and three = ? )',
               stmt_q => 'select `one`, `two`, `three` from `test`.`table` where ( `five` = ? and `one` = ? and `three` = ? )',
-              bind   => (('five', 6), ('one', 2), ('three', 4)),  # alpha order, man...
+              bind   => (('five', 6), ('one', 2), ('three', 4)), 
       },
       {
               func   => 'update',
@@ -197,7 +197,7 @@ my @tests =
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => {priority => ( -and => {'!=', 2}, { -not_like => '3%'} )}),
+              args   => \('test', '*', where => {priority => ( -and => ({'!=', 2}, { -not_like => '3%'}) )}),
               stmt   => 'SELECT * FROM test WHERE ( ( ( priority != ? ) AND ( priority NOT LIKE ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( ( ( `priority` != ? ) AND ( `priority` NOT LIKE ? ) ) )',
               bind   => (2, '3%'),
@@ -265,7 +265,7 @@ my @tests =
       },
       {
               func   => 'insert',
-              new    => {array_datatypes => 1},
+              new    => {array-datatypes => 1},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, ?)',
@@ -273,7 +273,7 @@ my @tests =
       },
       {
               func   => 'insert',
-              new    => {bindtype => 'columns', array_datatypes => 1},
+              new    => {bindtype => 'columns', array-datatypes => 1},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, ?)',
@@ -281,7 +281,7 @@ my @tests =
       },
       {
               func   => 'update',
-              new    => {array_datatypes => 1},
+              new    => {array-datatypes => 1},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'UPDATE test SET a = ?, b = ?',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = ?',
@@ -289,7 +289,7 @@ my @tests =
       },
       {
               func   => 'update',
-              new    => {bindtype => 'columns', array_datatypes => 1},
+              new    => {bindtype => 'columns', array-datatypes => 1},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'UPDATE test SET a = ?, b = ?',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = ?',
@@ -580,17 +580,24 @@ my @tests =
 
 my $s = Squirrel.new(:debug);
 
-for @tests[10..20] -> $test {
+for @tests -> $test {
     my $args = $test<args>;
     my @res;
+    next unless $test<stmt>;
     diag $test<stmt>;
     my $meth = $test<func>;
-    # lives-ok {
-        @res = $s."$meth"(|$args);
-    #    }, "$meth";
+    my $obj = do if $test<new> -> $args {
+        Squirrel.new(|$args, :debug);
+    }
+    else {
+        $s;
+    }
+     lives-ok {
+        @res = $obj."$meth"(|$args);
+        }, "$meth";
     diag @res[0];
     is @res[0], $test<stmt>, "$meth SQL looks good";
-    my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! val($v); given $t { when Int { $_.Int }; when Num { $_.Num }; default { $_.Str }}}});
+    my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
     is-deeply @res[1].Array, @bind.Array, "bind values ok";
 }
 

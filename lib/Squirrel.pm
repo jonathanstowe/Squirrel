@@ -227,8 +227,20 @@ class Squirrel {
     }
 
     multi method insert-value(Str $column, $value) {
-        self.debug("plain value");
-        (('?'), ($value));
+        self.debug("plain value $value");
+        my $v = do if $value ~~ Str {
+            my $a = val($value);
+            if $a ~~ Numeric {
+                +$a;
+            }
+            else {
+                $value;
+            }
+        }
+        else {
+            $value
+        }
+        (('?'), ($v));
     }
 
     # this is the "special references" in P5
@@ -282,6 +294,7 @@ class Squirrel {
             @all-bind.append: self.apply-bindtype($key, @values);
         }
         else { 
+            $!debug = True;
             my ($sql, @bind) = @values;
             self.assert-bindval-matches-bindtype(@bind);
             @set.append: "$label = $sql";
@@ -299,13 +312,13 @@ class Squirrel {
         my $*NESTED-FUNC-LHS = $key;
         my ( @set, @all-bind);
         if $p.key ~~ /^\-$<op>=(.+)/ { 
-            my ($sql, @bind) = self.where-unary-op(~$/<op>, $p.value);
+            my ($sql, @bind) = self.where-unary-op(~$/<op>, $p.value).flat;
             say ~$/<op> 
         }
         else {
             X::InvalidOperator.new.throw;
         }
-        flat ( @set, @all-bind);
+        ( @set, @all-bind);
     }
 
 
@@ -361,6 +374,7 @@ class Squirrel {
         ($sql, @bind);
     }
 
+
     multi method where($where, $order ) {
         my ($sql, @bind) = (samewith $where).flat;
         my ($order-sql, @order-bind) = self.order-by($order).flat;
@@ -372,7 +386,7 @@ class Squirrel {
 
     proto method build-where(|c) { * }
 
-    subset Logic of Str where { $_.uc ~~ "OR"|"AND" };
+    subset Logic of Str where { $_.defined && $_.uc ~~ "OR"|"AND" };
 
     multi method build-where(@where, Any:U $logic?) {
         (samewith @where, :$!logic).flat;
@@ -380,6 +394,7 @@ class Squirrel {
 
     multi method build-where(@where, Logic :$logic = $!logic) {
         my @clauses = @where;
+        self.debug("got clauses { @where.perl }");
 
         my (@sql-clauses, @all-bind);
         while @clauses.elems {
@@ -387,13 +402,19 @@ class Squirrel {
 
             my ($sql, @bind) = do given $el {
                 when Positional {
-                    self.build-where($el).flat;
+                    self.build-where($el, :$logic).flat;
                 }
                 when Associative|Pair {
                     self.build-where($el, logic => 'and').flat;
                 }
                 when Str {
-                    self.build-when($el => @clauses.shift).flat;
+                    self.build-where($el => @clauses.shift, :$logic).flat;
+                }
+                when Callable {
+                    self.build-where($el().hash, :$logic).flat;
+                }
+                default {
+                    note "unhandled clause $el";
                 }
             }
             if $sql {
@@ -404,6 +425,11 @@ class Squirrel {
 
         self.debug("got bind { @all-bind }");
         self.join-sql-clauses($logic, @sql-clauses, @all-bind);
+    }
+
+    multi method build-where(&where-sub, Str :$logic) {
+        my $where = where-sub().hash;
+        (samewith $where, :$logic).flat;
     }
 
     multi method build-where(Str :$logic, *%where) {
@@ -436,19 +462,23 @@ class Squirrel {
         flat ( "$key = ?", ($value,));
     }
 
+    multi method build-where(Pair $p ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 ), Str :$logic) {
+        self.debug("got a pair with an/or op");
+        die "checkpoint";
+    }
     multi method build-where(Pair $p ( :$key, :@value where *.elems > 0), Str :$logic is copy) {
         my @values = @value;
-        self.debug("pair with values { @values.perl }");
-        my $op = @values[0].defined && @values[0] ~~ m:i/^\-[AND|OR]$/ ?? @values.shift !! '';
-        my @distributed = @values.map(-> $v { $key => $v });
+        self.debug("pair $key => { @values.perl } logic({ $logic // '<undefined>'})");
+        my $op = @values[0].defined && @values[0].can('match') && @values[0] ~~ m:i/^\-[AND|OR]$/ ?? @values.shift !! '';
+        my @distributed = @values.map(-> $v { $v ~~ Callable ?? $v().hash !! $v }).map(-> $v { $key => $v });
 
         if $op {
             self.debug('adding op');
             @distributed.prepend: $op;
         }
 
-        $logic = $op ?? $op.substr(1) !! '';
-        self.debug("redistributing array with '$logic' with a { @distributed.perl }");
+        $logic = $op ?? $op.substr(1) !! $logic;
+        self.debug("redistributing array with '{ $logic // "<undefined>" }' with a { @distributed.perl }");
         self.build-where(@distributed, :$logic).flat;
     }
 
@@ -464,6 +494,11 @@ class Squirrel {
     multi method build-where(Pair $p ( :$key, Capture :$value), Str :$logic) {
         my ( $sql, @bind ) = $value.list.flat;
         $sql = self.quote($key) ~ " $sql";
+        ($sql, @bind);
+    }
+
+    multi method build-where(Capture $value, Str :$logic) {
+        my ( $sql, @bind) = $value.list.flat;
         ($sql, @bind);
     }
 
@@ -490,7 +525,7 @@ class Squirrel {
             $op ~~ s:i/^not_/NOT /;
 
             if $orig-op ~~ m:i/^\-$<logic>=(and|or)/ {
-                ($sql, @bind) = self.build-where($key => $val, ~$/<logic>);
+                ($sql, @bind) = self.build-where($key => $val, logic => ~$/<logic>);
             }
             elsif @!special-ops.grep( -> $so { $op ~~ $so<regex> }).first -> $special-op {
                 ($sql, @bind) = do given $special-op<handler> {
@@ -512,12 +547,16 @@ class Squirrel {
                         ($sql, @bind) = self.where-field-op($key, $op, $val);
                     }
                     when Any:U {
+                        self.debug("NULL with $op");
                         my $is = do given $op {
-                            when $!equality-op {
+                            when $!equality-op|$!like-op {
                                 'is'
                             }
-                            when $!inequality-op {
+                            when $!inequality-op|$!not-like-op {
                                 'is not'
+                            }
+                            default {
+                                die "unexpectated operator '$op' for NULL";
                             }
                         }
                         $sql = self.quote($key) ~ self.sqlcase(" $is null");
@@ -529,7 +568,7 @@ class Squirrel {
                 }
             }
 
-            ($all-sql) = ($all-sql.defined and $all-sql) ?? self.join-sql-clauses($logic, [$all-sql, $sql], []) !! $sql;
+            ($all-sql) = ($all-sql.defined and $all-sql) ?? self.join-sql-clauses($logic // 'and', [$all-sql, $sql], []) !! $sql;
             @all-bind.append: @bind;
         }
         ($all-sql, @all-bind);
@@ -598,16 +637,16 @@ class Squirrel {
     proto method where-op-ANDOR(|c) { * }
 
     multi method where-op-ANDOR(Str $op,  @value) {
-        self.build-where(@value, logic => $op);
+        self.build-where(@value, logic => $op).flat;
     }
 
     multi method where-op-ANDOR(Str $op where m:i/^or/, %value) {
         my @value = %value.pairs.sort(*.key);
-        self.build-where(@value, logic => $op);
+        self.build-where(@value, logic => $op).flat;
     }
 
     multi method where-op-ANDOR(Str $op where  * !~~ m:i/^or/, %value) {
-        self.build-where(%value);
+        self.build-where(%value).flat;
     }
 
     proto method where-op-NEST(|c) { * }
@@ -617,7 +656,7 @@ class Squirrel {
     }
     
     multi method where-op-NEST(Str $op, $value) {
-        self.build-where($value);
+        self.build-where($value).flat;
 
     }
 
@@ -1022,7 +1061,8 @@ sub _quote {
     method assert-bindval-matches-bindtype(*@bind) {
         if $!bindtype eq 'columns' {
             for @bind -> $item {
-                if !$item.defined || $item !~~ Pair || $item.elems != 2 {
+                self.debug("got item - { $item.perl } ");
+                if not $item.defined || $item !~~ Pair || $item.elems != 2 {
                     X::InvalidBind.new.throw;
                 }
             }
