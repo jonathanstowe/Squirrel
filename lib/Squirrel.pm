@@ -159,7 +159,7 @@ class Squirrel {
         my @values;
         my @all-bind;
 
-        for @data -> $value {
+        for @data.flat -> $value {
             my ($values, @bind) = self.insert-value(Str, $value).flat;
             @values.append: $values;
             @all-bind.append: @bind;
