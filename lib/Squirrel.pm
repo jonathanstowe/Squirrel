@@ -493,10 +493,10 @@ sub _insert_ARRAYREFREF { # literal SQL with bind
             elsif @!special-ops.grep( -> $so { $op ~~ $so<regex> }).first -> $special-op {
                 ($sql, @bind) = do given $special-op<handler> {
                     when Code {
-                        self.$_($key, $op, $val);
+                        self.$_($key, $op, $val).flat;
                     }
                     when Str {
-                        self."$_"($key, $op, $val);
+                        self."$_"($key, $op, $val).flat;
                     }
                     default {
                         die "WTF! $_ in special-op";
@@ -771,11 +771,11 @@ sub _where_UNDEF {
         for @values -> $value {
             my ( $s, @b) = do given $value {
                 when Cool {
-                    ($placeholder, self.apply-bindtype($key, $value));
+                    ($placeholder, self.apply-bindtype($key, $value)).flat;
                 }
                 when Pair {
                     my $func = $value.key.subst(/^\-/,'');
-                    self.where-unary-op($func => $value.value);
+                    self.where-unary-op($func => $value.value).flat;
                 }
             }
             @all-sql.append: $s;
