@@ -227,7 +227,7 @@ class Squirrel {
     }
 
     multi method insert-value(Str $column, $value) {
-        self.debug("plain value $value");
+        self.debug("plain value { $value // '<undefined>' }");
         my $v = do if $value ~~ Str {
             my $a = val($value);
             if $a ~~ Numeric {
@@ -294,7 +294,6 @@ class Squirrel {
             @all-bind.append: self.apply-bindtype($key, @values);
         }
         else { 
-            $!debug = True;
             my ($sql, @bind) = @values;
             self.assert-bindval-matches-bindtype(@bind);
             @set.append: "$label = $sql";
@@ -622,13 +621,15 @@ class Squirrel {
                     (self.convert('?'), self.apply-bindtype($*NESTED-FUNC-LHS, $rhs)).flat;
                 }
                 else {
-                    (self.convert('?'), self.apply-bindtype($*NESTED-FUNC-LHS, $rhs)).flat;
+                    (self.convert('?'), self.apply-bindtype($op, $rhs)).flat;
                 }
             }
             default {
                 self.build-where($rhs).flat;
             }
         }
+
+        self.debug("got sql -> $sql");
 
         $sql = sprintf '%s %s', self.sqlcase($op), $sql;
         return ($sql, @bind);

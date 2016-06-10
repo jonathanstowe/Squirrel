@@ -33,7 +33,7 @@ my @tests =
       {
               func   => 'select',
               args   => \('test', '*', where => ( { a => 5 }, { b => 6 } )),
-              stmt   => 'SELECT * FROM test WHERE ( ( a = ? ) OR ( b = ? ) )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a = ? ) OR ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( ( `a` = ? ) OR ( `b` = ? ) )',
               bind   => (5,6)
       },
@@ -99,7 +99,7 @@ my @tests =
                          where => { 'test1.field' => \'!= test2.field',
                             user => {'!=','nwiger'} },
                         ),
-              stmt   => 'DELETE FROM test1, test2, test3 WHERE ( test1.field != test2.field AND user != ? )',
+              stmt   => 'DELETE FROM test1, test2, test3 WHERE ( ( ( test1.field != test2.field ) AND ( user != ? ) ) )',
               stmt_q => 'DELETE FROM `test1`, `test2`, `test3` WHERE ( `test1`.`field` != test2.field AND `user` != ? )', 
               bind   => ('nwiger')
       },
@@ -149,7 +149,7 @@ my @tests =
       {
               func   => 'update',
               args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => {a => {'between' => (1,2)}}),
-              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( a BETWEEN ? AND ? )',
+              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = to_date(?, \'MM/DD/YY\') WHERE ( `a` BETWEEN ? AND ? )',
               bind   => (<1 02/02/02 1 2>),
       },
@@ -179,8 +179,8 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns', case => 'lower'},
               args   => \('test.table', (qw/one two three/), where => {one => 2, three => 4, five => 6} ),
-              stmt   => 'select one, two, three from test.table where ( five = ? and one = ? and three = ? )',
-              stmt_q => 'select `one`, `two`, `three` from `test`.`table` where ( `five` = ? and `one` = ? and `three` = ? )',
+              stmt   => 'select one, two, three from test.table where ( ( ( five = ? ) and ( one = ? ) and ( three = ? ) ) )',
+              stmt_q => 'select `one`, `two`, `three` from `test`.`table` where ( ( `five` = ? and `one` = ? and `three` = ? ) ) )',
               bind   => (('five', 6), ('one', 2), ('three', 4)), 
       },
       {
@@ -189,7 +189,7 @@ my @tests =
               args   => \('testin.table2', {One => 22, Three => 44, FIVE => 66},
                                           where => {Beer => 'is', Yummy => '%YES%', IT => ('IS','REALLY','GOOD')}),
               stmt   => 'UPDATE testin.table2 SET FIVE = ?, One = ?, Three = ? WHERE '
-                       ~ '( Beer LIKE ? AND ( ( IT LIKE ? ) OR ( IT LIKE ? ) OR ( IT LIKE ? ) ) AND Yummy LIKE ? )',
+                       ~ '( ( ( Beer LIKE ? ) AND ( ( ( IT LIKE ? ) OR ( IT LIKE ? ) OR ( IT LIKE ? ) ) AND ( Yummy LIKE ? ) ) )',
               stmt_q => 'UPDATE `testin`.`table2` SET `FIVE` = ?, `One` = ?, `Three` = ? WHERE '
                        ~ '( `Beer` LIKE ? AND ( ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) ) AND `Yummy` LIKE ? )',
               bind   => (('FIVE', 66), ('One', 22), ('Three', 44), ('Beer','is'),
@@ -206,7 +206,7 @@ my @tests =
               func   => 'select',
               args   => \('Yo Momma', '*', where => { user => 'nwiger',
                                        -nest => ( workhrs => {'>', 20}, geo => 'ASIA' ) }),
-              stmt   => 'SELECT * FROM Yo Momma WHERE ( ( ( workhrs > ? ) OR ( geo = ? ) ) AND user = ? )',
+              stmt   => 'SELECT * FROM Yo Momma WHERE ( ( ( ( ( workhrs > ? ) OR ( geo = ? ) ) ) AND ( user = ? ) ) )',
               stmt_q => 'SELECT * FROM `Yo Momma` WHERE ( ( ( `workhrs` > ? ) OR ( `geo` = ? ) ) AND `user` = ? )',
               bind   => (<20 ASIA nwiger>),
       },
@@ -218,10 +218,7 @@ my @tests =
                                            -nest => ( face => ( -or => {'=', 'mr.happy'}, {'=', Any} ) ) },
                         ),
 
-              stmt   => 'UPDATE taco_punches SET one = ?, three = ? WHERE ( ( ( ( ( face = ? ) OR ( face IS NULL ) ) ) )'
-                      ~ ' AND ( ( bland != ? ) AND ( bland != ? ) ) AND ( ( tasty != ? ) OR ( tasty != ? ) ) )',
-              stmt_q => 'UPDATE `taco_punches` SET `one` = ?, `three` = ? WHERE ( ( ( ( ( `face` = ? ) OR ( `face` IS NULL ) ) ) )'
-                      ~ ' AND ( ( `bland` != ? ) AND ( `bland` != ? ) ) AND ( ( `tasty` != ? ) OR ( `tasty` != ? ) ) )',
+              stmt   => 'UPDATE taco_punches SET one = ?, three = ? WHERE ( ( ( ( ( face = ? ) OR ( face IS NULL ) ) ) AND ( ( ( bland != ? ) OR ( bland != ? ) ) ) AND ( ( ( tasty != ? ) OR ( tasty != ? ) ) ) ) )',
               bind   => (<2 4 mr.happy yes YES yes YES>),
       },
       {
@@ -229,10 +226,7 @@ my @tests =
               args   => \('jeff', '*', where => { name => {'ilike' => '%smith%', -not_in => ('Nate','Jim','Bob','Sally')},
                                        -nest => ( -or => ( -and => (age => { '-between' => (20,30), }, age => {'!=' => 25,} ),
                                                                    yob => {'<' => 1976,} ), ), } ),
-              stmt   => 'SELECT * FROM jeff WHERE ( ( ( ( ( ( ( age BETWEEN ? AND ? ) AND ( age != ? ) ) ) OR ( yob < ? ) ) ) )'
-                      ~ ' AND name NOT IN ( ?, ?, ?, ? ) AND name ILIKE ? )',
-              stmt_q => 'SELECT * FROM `jeff` WHERE ( ( ( ( ( ( ( `age` BETWEEN ? AND ? ) AND ( `age` != ? ) ) ) OR ( `yob` < ? ) ) ) )'
-                      ~ ' AND `name` NOT IN ( ?, ?, ?, ? ) AND `name` ILIKE ? )',
+              stmt   => 'SELECT * FROM jeff WHERE ( ( ( ( ( ( ( ( age BETWEEN ? AND ? ) ) AND ( age != ? ) ) ) OR ( yob < ? ) ) ) AND ( ( ( name NOT IN ( ?, ?, ?, ? ) ) AND ( name ILIKE ? ) )  ) ) )',
               bind   => (<20 30 25 1976 Nate Jim Bob Sally %smith%>)
       },
 # bad
@@ -243,10 +237,7 @@ my @tests =
                           { -nest => { firsttime => (-or => {'=','yes'}, Any) } },
                           { -and => ( { firstname => {-not_like => 'candace'} }, { lastname => {-in => (<jugs canyon towers>) } } ) },
                         ) ),
-              stmt   => 'UPDATE fhole SET fpoles = ? WHERE ( ( ( ( ( ( ( race = ? ) OR ( race = ? ) OR ( race = ? ) ) ) ) ) )'
-                      ~ ' OR ( ( ( ( firsttime = ? ) OR ( firsttime IS NULL ) ) ) ) OR ( ( ( firstname NOT LIKE ? ) ) AND ( lastname IN (?, ?, ?) ) ) )',
-              stmt_q => 'UPDATE `fhole` SET `fpoles` = ? WHERE ( ( ( ( ( ( ( `race` = ? ) OR ( `race` = ? ) OR ( `race` = ? ) ) ) ) ) )'
-                      ~ ' OR ( ( ( ( `firsttime` = ? ) OR ( `firsttime` IS NULL ) ) ) ) OR ( ( ( `firstname` NOT LIKE ? ) ) AND ( `lastname` IN( ?, ?, ? )) ) )',
+              stmt   => 'UPDATE fhole SET fpoles = ? WHERE ( ( ( ( ( race = ? ) OR ( race = ? ) OR ( race = ? ) ) ) OR ( ( ( firsttime = ? ) OR ( firsttime IS NULL ) ) ) OR ( ( ( firstname NOT LIKE ? ) AND ( lastname IN ( ?, ?, ? ) ) ) ) ) )',
               bind   => (<4 black white asian yes candace jugs canyon towers>)
       },
       {
@@ -298,14 +289,14 @@ my @tests =
       {
               func   => 'select',
               args   => \('test', '*', where => { a => {'>' =>  \'1 + 1'}, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a > 1 + 1 AND b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a > 1 + 1 ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` > 1 + 1 AND `b` = ? )',
               bind   => (8),
       },
       {
               func   => 'select',
               args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a < to_date(?, \'MM/DD/YY\') AND b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a < to_date(?, \'MM/DD/YY\') ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => ('02/02/02', 8),
       },
@@ -319,7 +310,7 @@ my @tests =
       {
               func   => 'update',
               args   => \('test', {a => 1, b => \("42")}, where => {a => {'between', (1,2)}}),
-              stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( a BETWEEN ? AND ? )',
+              stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = 42 WHERE ( `a` BETWEEN ? AND ? )',
               bind   => (<1 1 2>),
       },
@@ -333,14 +324,14 @@ my @tests =
       {
               func   => 'select',
               args   => \('test', '*', where => { a => \("= 42"), b => 1}),
-              stmt   => q{SELECT * FROM test WHERE ( a = 42 ) AND (b = ? )},
+              stmt   => q{SELECT * FROM test WHERE ( ( ( a = 42 ) AND ( b = ? ) ) )},
               stmt_q => q{SELECT * FROM `test` WHERE ( `a` = 42 ) AND ( `b` = ? )},
               bind   => (1,),
       },
       {
               func   => 'select',
               args   => \('test', '*', where => { a => {'<' => \("42")}, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a < 42 AND b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a < 42 ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < 42 AND `b` = ? )',
               bind   => (8,),
       },
@@ -356,7 +347,7 @@ my @tests =
               func   => 'update',
               new    => {bindtype => 'columns'},
               args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, where => {a => {'between' => (1,2)}}),
-              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( a BETWEEN ? AND ? )',
+              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = to_date(?, \'MM/DD/YY\') WHERE ( `a` BETWEEN ? AND ? )',
               bind   => ((a => '1'), (dummy => '02/02/02'), (a => '1'), (a => '2')),
       },
@@ -372,7 +363,7 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a < to_date(?, \'MM/DD/YY\') AND b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a < to_date(?, \'MM/DD/YY\') ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => ((dummy => '02/02/02'), (b => 8)),
       },
@@ -441,15 +432,15 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a < to_date(?, \'MM/DD/YY\') AND b = ? )',
-              stmt_q => 'SELECT * FROM `test` WHERE ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( a < to_date(?, \'MM/DD/YY\') ) AND ( b = ? ) ) )',
+              stmt_q => 'SELECT * FROM `test` WHERE ( ( ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => (({dummy => 1} => '02/02/02'), (b => 8)),
       },
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => { '-or' => ( '-and' => ( a => 'a', b => 'b', ), '-and' => ( c => 'c', d => 'd', ),  ), }),
-              stmt   => 'SELECT * FROM test WHERE ( a = ? AND b = ? ) OR ( c = ? AND d = ?  )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( ( ( a = ? ) AND ( b = ? ) ) ) OR ( ( ( c = ? ) AND ( d = ? ) ) ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` = ? AND `b` = ?  ) OR ( `c` = ? AND `d` = ? )',
               bind   => ((a => 'a'), (b => 'b'), ( c => 'c'),( d => 'd')),
       },
@@ -457,7 +448,7 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => ( { a => 1, b => 1}, ( a => 2, b => 2) ) ),
-              stmt   => 'SELECT * FROM test WHERE ( a = ? AND b = ? ) OR ( a = ? OR b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( ( ( a = ? ) AND ( b = ? ) ) ) OR ( ( ( a = ? ) OR ( b = ? ) ) ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` = ? AND `b` = ? ) OR ( `a` = ? OR `b` = ? )',
               bind   => ((a => 1), (b => 1), ( a => 2), ( b => 2)),
       },
@@ -465,7 +456,7 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => ( ( a => 1, b => 1), { a => 2, b => 2 } ) ),
-              stmt   => 'SELECT * FROM test WHERE ( a = ? OR b = ? ) OR ( a = ? AND b = ? )',
+              stmt   => 'SELECT * FROM test WHERE ( ( ( ( ( a = ? ) OR ( b = ? ) ) ) OR ( ( ( a = ? ) AND ( b = ? ) ) ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` = ? OR `b` = ? ) OR ( `a` = ? AND `b` = ? )',
               bind   => ((a => 1), (b => 1), ( a => 2), ( b => 2)),
       },
@@ -508,35 +499,35 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => ( Y => { '=' => { -max => { -LENGTH => { -min => 'x' } } } } ) ),
-              stmt   => 'SELECT * FROM test WHERE ( Y = ( MAX( LENGTH( MIN ? ) ) ) )',
+              stmt   => 'SELECT * FROM test WHERE ( Y = (MAX (LENGTH (MIN ?))) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `Y` = ( MAX( LENGTH( MIN ? ) ) ) )',
               bind   => ((Y => 'x')),
       },
       {
               func => 'select',
               args => \('test', '*', where => { a => { '=' => Any }, b => { -is => Any }, c => { -like => Any } }),
-              stmt => 'SELECT * FROM test WHERE ( a IS NULL AND b IS NULL AND c IS NULL )',
+              stmt => 'SELECT * FROM test WHERE ( ( ( a IS NULL ) AND ( b IS NULL ) AND ( c IS NULL ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IS NULL AND `b` IS NULL AND `c` IS NULL )',
               bind => (),
       },
       {
               func => 'select',
               args => \('test', '*', where => { a => { '!=' => Any }, b => { -is_not => Any }, c => { -not_like => Any } }),
-              stmt => 'SELECT * FROM test WHERE ( a IS NOT NULL AND b IS NOT  NULL AND c IS NOT  NULL )',
+              stmt => 'SELECT * FROM test WHERE ( ( ( a IS NOT NULL ) AND ( b IS NOT NULL ) AND ( c IS NOT NULL ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IS NOT  NULL AND `b` IS NOT  NULL AND `c` IS NOT  NULL )',
               bind => (),
       },
       {
               func => 'select',
               args => \('test', '*', where => { a => { IS => Any }, b => { LIKE => Any } }),
-              stmt => 'SELECT * FROM test WHERE ( a IS NULL AND b IS NULL )',
+              stmt => 'SELECT * FROM test WHERE ( ( ( a IS NULL ) AND ( b IS NULL ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IS NULL AND `b` IS NULL )',
               bind => (),
       },
       {
               func => 'select',
               args => \('test', '*', where =>{ a => { 'IS NOT' => Any }, b => { 'NOT LIKE' => Any } }),
-              stmt => 'SELECT * FROM test WHERE ( a IS NOT NULL AND b IS NOT  NULL )',
+              stmt => 'SELECT * FROM test WHERE ( ( ( a IS NOT NULL ) AND ( b IS NOT NULL ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IS NOT  NULL AND `b` IS NOT  NULL )',
               bind => (),
       },
@@ -558,36 +549,35 @@ my @tests =
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => 'id' ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING id',
+              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING id',
               stmt_q => 'UPDATE `mytable` SET `foo` = ? WHERE `baz` = ? RETURNING `id`',
               bind => (42, 32),
       },
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => '*' ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING *',
+              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING *',
               stmt_q => 'UPDATE `mytable` SET `foo` = ? WHERE `baz` = ? RETURNING *',
               bind => (42, 32),
       },
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => ('id','created_at') ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING id, created_at',
+              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING id, created_at',
               stmt_q => 'UPDATE `mytable` SET `foo` = ? WHERE `baz` = ? RETURNING `id`, `created_at`',
               bind => (42, 32),
       };
 
 
-my $s = Squirrel.new(:debug);
+my $s = Squirrel.new();
 
 for @tests -> $test {
     my $args = $test<args>;
     my @res;
     next unless $test<stmt>;
-    diag $test<stmt>;
     my $meth = $test<func>;
     my $obj = do if $test<new> -> $args {
-        Squirrel.new(|$args, :debug);
+        Squirrel.new(|$args);
     }
     else {
         $s;
@@ -595,7 +585,6 @@ for @tests -> $test {
      lives-ok {
         @res = $obj."$meth"(|$args);
         }, "$meth";
-    diag @res[0];
     is @res[0], $test<stmt>, "$meth SQL looks good";
     my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
     is-deeply @res[1].Array, @bind.Array, "bind values ok";
