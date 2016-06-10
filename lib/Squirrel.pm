@@ -281,8 +281,13 @@ class Squirrel {
     proto method build-update(|c) { * }
 
     multi method build-update(Pair $p) {
-        self.debug("expanding pair");
+        self.debug("expanding pair { $p.perl }");
         (samewith $p.key, $p.value.list).flat;
+    }
+
+    multi method build-update(Pair $p (Str :$key, :%value)) {
+        self.debug("Pair with Associative value");
+        (samewith $key, %value.pairs.first).flat;
     }
 
 
@@ -292,6 +297,11 @@ class Squirrel {
         my ( $v, @bind) = $value.list.flat;
         # This could do with some cleaning up
         ("$label = $v", @bind);
+    }
+
+    multi method build-update(Pair $p, ( Str :$key, :&value )) {
+        self.debug("Got pair with a block value");
+        self.debug(value().perl);
     }
 
     multi method build-update(Str $key, @values ) {
@@ -321,8 +331,10 @@ class Squirrel {
         my $*NESTED-FUNC-LHS = $key;
         my ( @set, @all-bind);
         if $p.key ~~ /^\-$<op>=(.+)/ { 
+            my $label = self.quote($key);
             my ($sql, @bind) = self.where-unary-op(~$/<op>, $p.value).flat;
-            say ~$/<op> 
+            @set.append: "$label = $sql";
+            @all-bind.append: @bind;
         }
         else {
             X::InvalidOperator.new.throw;
@@ -1068,7 +1080,7 @@ sub _quote {
                 }
             }
             default {
-                $!array-datatypes ?? $values !! $values.list;
+                $!array-datatypes ?? $values.item !! $values.list;
             }
         }
     }
