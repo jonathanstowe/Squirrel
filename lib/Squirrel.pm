@@ -1059,11 +1059,16 @@ sub _quote {
         self.debug("Column { $column // <undefined> } - with bindtype { $!bindtype // '<none>' }");
         given $!bindtype {
             when 'columns' {
-                $values.map(-> $v { $column => $v });
+                if $!array-datatypes {
+                    self.debug($values.WHAT);
+                    ($column => $values.elems > 1 ?? $values.list !! $values[0] )
+                }
+                else {
+                    $values.map(-> $v { $column => $v });
+                }
             }
             default {
-                $values.list;
-
+                $!array-datatypes ?? $values !! $values.list;
             }
         }
     }
