@@ -173,7 +173,7 @@ my @tests =
               args   => ('test.table', {one => 2, three => 4, five => 6} ),
               stmt   => 'INSERT INTO test.table (five, one, three) VALUES (?, ?, ?)',
               stmt_q => 'INSERT INTO `test`.`table` (`five`, `one`, `three`) VALUES (?, ?, ?)',
-              bind   => (('five', 6), ('one', 2), ('three', 4)),
+              bind   => (('five' => 6), ('one' => 2), ('three' => 4)),
       },
       {
               func   => 'select',
@@ -181,7 +181,7 @@ my @tests =
               args   => \('test.table', (qw/one two three/), where => {one => 2, three => 4, five => 6} ),
               stmt   => 'select one, two, three from test.table where ( ( ( five = ? ) and ( one = ? ) and ( three = ? ) ) )',
               stmt_q => 'select `one`, `two`, `three` from `test`.`table` where ( ( `five` = ? and `one` = ? and `three` = ? ) ) )',
-              bind   => (('five', 6), ('one', 2), ('three', 4)), 
+              bind   => (('five' => 6), ('one' => 2), ('three' => 4)), 
       },
       {
               func   => 'update',
@@ -305,11 +305,11 @@ my @tests =
               args   => ('test', {a => 1, b => 2, c => 3, d => 4, e => { answer => 42 }}),
               stmt   => 'INSERT INTO test (a, b, c, d, e) VALUES (?, ?, ?, ?, ?)',
               stmt_q => 'INSERT INTO `test` (`a`, `b`, `c`, `d`, `e`) VALUES (?, ?, ?, ?, ?)',
-              bind   => (qw/1 2 3 4/, { answer => 42}),
+              bind   => (1, 2, 3, 4,  answer => 42),
       },
       {
               func   => 'update',
-              args   => \('test', {a => 1, b => \("42")}, where => {a => {'between', (1,2)}}),
+              args   => \('test', {a => 1, b => \("42") }, where => {a => {'between', (1,2)}}),
               stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = 42 WHERE ( `a` BETWEEN ? AND ? )',
               bind   => (<1 1 2>),
@@ -341,7 +341,7 @@ my @tests =
               args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, to_date(?, \'MM/DD/YY\'))',
-              bind   => ((a => '1'), (dummy => '02/02/02')),
+              bind   => ((a => 1), (dummy => '02/02/02')),
       },
       {
               func   => 'update',
@@ -349,7 +349,7 @@ my @tests =
               args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, where => {a => {'between' => (1,2)}}),
               stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = to_date(?, \'MM/DD/YY\') WHERE ( `a` BETWEEN ? AND ? )',
-              bind   => ((a => '1'), (dummy => '02/02/02'), (a => '1'), (a => '2')),
+              bind   => ((a => 1), (dummy => '02/02/02'), (a => 1), (a => 2)),
       },
       {
               func   => 'select',
@@ -410,7 +410,7 @@ my @tests =
               args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, to_date(?, \'MM/DD/YY\'))',
-              bind   => ((a => '1'), ({dummy => 1} => '02/02/02')),
+              bind   => ((a => 1), ({dummy => 1} => '02/02/02')),
       },
       {
               func   => 'update',
@@ -418,7 +418,7 @@ my @tests =
               args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02')), c => { -lower => 'foo' }}, where => {a => {'between', (1,2)}}),
               stmt   => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY'), c = LOWER ? WHERE ( a BETWEEN ? AND ? )",
               stmt_q => "UPDATE `test` SET `a` = ?, `b` = to_date(?, 'MM/DD/YY'), `c` = LOWER ? WHERE ( `a` BETWEEN ? AND ? )",
-              bind   => ((a => '1'), ({dummy => 1} => '02/02/02'), (c => 'foo'), (a => '1'), (a => '2')),
+              bind   => ((a => 1), ({dummy => 1} => '02/02/02'), (c => 'foo'), (a => '1'), (a => '2')),
       },
       {
               func   => 'select',
@@ -436,6 +436,7 @@ my @tests =
               stmt_q => 'SELECT * FROM `test` WHERE ( ( ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => (({dummy => 1} => '02/02/02'), (b => 8)),
       },
+# these
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
@@ -569,15 +570,17 @@ my @tests =
       };
 
 
-my $s = Squirrel.new();
+my $debug = False;
+my $s = Squirrel.new(:$debug);
 
 for @tests -> $test {
+    diag $++;
     my $args = $test<args>;
     my @res;
     next unless $test<stmt>;
     my $meth = $test<func>;
     my $obj = do if $test<new> -> $args {
-        Squirrel.new(|$args);
+        Squirrel.new(|$args, :$debug);
     }
     else {
         $s;

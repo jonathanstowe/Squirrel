@@ -207,7 +207,7 @@ class Squirrel {
         my (@values, @all-bind);
         if $!array-datatypes {
             @values.append: '?';
-            @all-bind.append: self.apply-bindtype($column, @value);
+            @all-bind.append: self.apply-bindtype($column, @value).flat;
         }
         else {
             my ( $sql, @bind) = @value;
@@ -222,7 +222,7 @@ class Squirrel {
         self.debug("hash value");
         my (@values, @all-bind);
         @values.append: '?';
-        @all-bind.append: self.apply-bindtype($column, %value);
+        @all-bind.append: self.apply-bindtype($column, %value).flat;
         (@values.join(', '), @all-bind);
     }
 
@@ -240,7 +240,7 @@ class Squirrel {
         else {
             $value
         }
-        (('?'), ($v));
+        (('?'), self.apply-bindtype($column, $v));
     }
 
     # this is the "special references" in P5
@@ -281,17 +281,26 @@ class Squirrel {
     proto method build-update(|c) { * }
 
     multi method build-update(Pair $p) {
+        self.debug("expanding pair");
         (samewith $p.key, $p.value.list).flat;
     }
 
 
+    # handle \"foo" type values (the .list in the above exploded it)
+    multi method build-update(Pair $p (Str :$key, Capture :$value)) {
+        my $label = self.quote($key);
+        my ( $v, @bind) = $value.list.flat;
+        # This could do with some cleaning up
+        ("$label = $v", @bind);
+    }
 
-    multi method build-update(Str $key, @values) {
+    multi method build-update(Str $key, @values ) {
+        self.debug("got values { @values.perl }");
         my ( @set, @all-bind);
         my $label = self.quote($key);
         if @values.elems == 1 or $!array-datatypes {
             @set.append: "$label = ?";
-            @all-bind.append: self.apply-bindtype($key, @values);
+            @all-bind.append: self.apply-bindtype($key, @values).flat;
         }
         else { 
             my ($sql, @bind) = @values;
@@ -302,6 +311,7 @@ class Squirrel {
         self.debug("bind { @all-bind.perl }");
         (@set, @all-bind);
     }
+
 
     class X::InvalidOperator is Exception {
         has $.message = "Not a valid operator";
@@ -393,7 +403,7 @@ class Squirrel {
 
     multi method build-where(@where, Logic :$logic = $!logic) {
         my @clauses = @where;
-        self.debug("got clauses { @where.perl }");
+        self.debug("(Array) got clauses { @where.perl }");
 
         my (@sql-clauses, @all-bind);
         while @clauses.elems {
@@ -452,13 +462,14 @@ class Squirrel {
 
     multi method build-where(Pair $p ( Str :$key where * ~~ /^\-./, :$value), Str :$logic) {
         my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
-        my ( $s, @b) = self.where-unary-op($op, $value);
+        my ( $s, @b) = self.where-unary-op($op, $value).flat;
         $s = "($s)" unless self.is-unary-operator($op) || self.is-nested-func-lhs($key);
         ($s, @b);
     }
 
     multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric ), Str :$logic) {
-        flat ( "$key = ?", ($value,));
+        self.debug("Pair with Stringy|Numeric value");
+        flat ( "$key = ?", self.apply-bindtype($key, $value));
     }
 
     multi method build-where(Pair $p ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 ), Str :$logic) {
@@ -690,7 +701,7 @@ class Squirrel {
     }
 
     multi method where-op-VALUE(Str $op, Cool $lhs, Cool:D $rhs) {
-        my @bind = self.apply-bindtype( $lhs.defined ?? $lhs !! $*NESTED-FUNC-LHS // Any, $rhs);
+        my @bind = self.apply-bindtype( $lhs.defined ?? $lhs !! $*NESTED-FUNC-LHS // Any, $rhs).flat;
         $lhs ?? (self.convert(self.quote($lhs)) ~ ' = ' ~ self.convert('?'), @bind) !! (self.convert('?'), @bind);
     }
 
@@ -869,14 +880,14 @@ sub _where_UNDEF {
                     ($placeholder, $value);
                 }
                 when Pair {
-                    self.where-unary-op($value);
+                    self.where-unary-op($value).flat;
                 }
 
             }
             @all-sql.append: $sql;
             @all-bind.append: @bind;
         }
-        ( sprintf('%s %s ( %s )', $label, $op, @all-sql.join(', ')), self.apply-bindtype($key, @all-bind),);
+        ( sprintf('%s %s ( %s )', $label, $op, @all-sql.join(', ')), self.apply-bindtype($key, @all-bind),).flat;
     }
 
     multi method where-field-IN(Str $key, Str $op is copy, @values where *.elems == 0) {
@@ -1045,9 +1056,10 @@ sub _quote {
     }
 
     method apply-bindtype(Str $column, $values) {
+        self.debug("Column { $column // <undefined> } - with bindtype { $!bindtype // '<none>' }");
         given $!bindtype {
             when 'columns' {
-                $values.map({ [ $column, $_ ]});
+                $values.map(-> $v { $column => $v });
             }
             default {
                 $values.list;
