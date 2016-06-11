@@ -188,12 +188,11 @@ my @tests =
               new    => {bindtype => 'columns', cmp => 'like'},
               args   => \('testin.table2', {One => 22, Three => 44, FIVE => 66},
                                           where => {Beer => 'is', Yummy => '%YES%', IT => ('IS','REALLY','GOOD')}),
-              stmt   => 'UPDATE testin.table2 SET FIVE = ?, One = ?, Three = ? WHERE '
-                       ~ '( ( ( Beer LIKE ? ) AND ( ( ( IT LIKE ? ) OR ( IT LIKE ? ) OR ( IT LIKE ? ) ) AND ( Yummy LIKE ? ) ) )',
+              stmt   => 'UPDATE testin.table2 SET FIVE = ?, One = ?, Three = ? WHERE ( ( ( Beer LIKE ? ) AND ( ( ( IT LIKE ? ) OR ( IT LIKE ? ) OR ( IT LIKE ? ) ) ) AND ( Yummy LIKE ? ) ) )',
               stmt_q => 'UPDATE `testin`.`table2` SET `FIVE` = ?, `One` = ?, `Three` = ? WHERE '
                        ~ '( `Beer` LIKE ? AND ( ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) ) AND `Yummy` LIKE ? )',
-              bind   => (('FIVE', 66), ('One', 22), ('Three', 44), ('Beer','is'),
-                         ('IT','IS'), ('IT','REALLY'), ('IT','GOOD'), ('Yummy','%YES%')),
+              bind   => (('FIVE' => 66), ('One' => 22), ('Three' => 44), ('Beer' => 'is'),
+                         ('IT' => 'IS'), ('IT' => 'REALLY'), ('IT' => 'GOOD'), ('Yummy' => '%YES%')),
       },
       {
               func   => 'select',
