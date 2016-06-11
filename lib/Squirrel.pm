@@ -481,7 +481,7 @@ class Squirrel {
 
     multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric ), Str :$logic) {
         self.debug("Pair with Stringy|Numeric value");
-        flat ( "$key = ?", self.apply-bindtype($key, $value));
+        flat ( "$key { self.sqlcase($!cmp) } ?", self.apply-bindtype($key, $value));
     }
 
     multi method build-where(Pair $p ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 ), Str :$logic) {
