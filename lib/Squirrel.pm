@@ -575,9 +575,6 @@ class Squirrel {
                         }
                         $sql = self.quote($key) ~ self.sqlcase(" $is null");
                     }
-                    when Capture {
-                        self.debug("capture value");
-                    }
                     default {
                         ($sql, @bind) = self.where-unary-op($op, $val).flat;
                         $sql = join(' ', self.convert(self.quote($key)), $*NESTED-FUNC-LHS && $*NESTED-FUNC-LHS eq $key ?? $sql !! "($sql)");
