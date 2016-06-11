@@ -395,7 +395,7 @@ my @tests =
               func   => 'select',
               new    => {bindtype => 'columns'},
               args   => \('test', '*', where => { a => {-in => \("(SELECT d FROM to_date(?, 'MM/DD/YY') AS d)", (dummy => '02/02/02')), }, b => 8 }),
-              stmt   => 'SELECT * FROM test WHERE ( a IN (SELECT d FROM to_date(?, \'MM/DD/YY\') AS d) AND b = ? )',
+              stmt   => "SELECT * FROM test WHERE ( ( ( a IN ( SELECT d FROM to_date(?, 'MM/DD/YY') AS d ) ) AND ( b = ? ) ) )",
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IN (SELECT d FROM to_date(?, \'MM/DD/YY\') AS d) AND `b` = ? )',
               bind   => ((dummy => '02/02/02'), (b => 8)),
       },
@@ -570,10 +570,21 @@ my @tests =
       };
 
 
-my $debug = False;
+multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
+
+    my $range;
+    if $from.defined && $to.defined {
+        $range = $from .. $to;
+    }
+    else {
+        $range = $only // $from // $to // ^(@tests.elems);
+    }
+
+    say $range;
+
 my $s = Squirrel.new(:$debug);
 
-for @tests -> $test {
+for @tests[$range.list] -> $test {
     diag $++;
     my $args = $test<args>;
     my @res;
@@ -585,9 +596,9 @@ for @tests -> $test {
     else {
         $s;
     }
-     lives-ok {
+#     lives-ok {
         @res = $obj."$meth"(|$args);
-        }, "$meth";
+#        }, "$meth";
     is @res[0], $test<stmt>, "$meth SQL looks good";
     my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
     is-deeply @res[1].Array, @bind.Array, "bind values ok";
@@ -595,4 +606,5 @@ for @tests -> $test {
 
 
 done-testing;
+}
 # vim: expandtab shiftwidth=4 ft=perl6
