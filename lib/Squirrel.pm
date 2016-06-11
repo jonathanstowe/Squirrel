@@ -540,6 +540,7 @@ class Squirrel {
         my ($all-sql, @all-bind);
 
         for %value.pairs.sort(*.key) -> $ (:key($orig-op), :value($val)) {
+            self.debug("pair { $orig-op => $val.perl }");
             my ($sql, @bind);
             my $op = $orig-op.subst(/^\-/,'').trim.subst(/\s+/, ' ');
             self.assert-pass-injection-guard($op);
@@ -550,17 +551,8 @@ class Squirrel {
                 ($sql, @bind) = self.build-where($key => $val, logic => ~$/<logic>);
             }
             elsif @!special-ops.grep( -> $so { $op ~~ $so<regex> }).first -> $special-op {
-                ($sql, @bind) = do given $special-op<handler> {
-                    when Code {
-                        self.$_($key, $op, $val).flat;
-                    }
-                    when Str {
-                        self."$_"($key, $op, $val).flat;
-                    }
-                    default {
-                        die "WTF! $_ in special-op";
-                    }
-                }
+                self.debug("special op { $special-op<handler> }");
+                ($sql, @bind) = self.where-special-op($special-op<handler>, $key, $op, $val).flat;
 
             }
             else {
@@ -583,6 +575,9 @@ class Squirrel {
                         }
                         $sql = self.quote($key) ~ self.sqlcase(" $is null");
                     }
+                    when Capture {
+                        self.debug("capture value");
+                    }
                     default {
                         ($sql, @bind) = self.where-unary-op($op, $val).flat;
                         $sql = join(' ', self.convert(self.quote($key)), $*NESTED-FUNC-LHS && $*NESTED-FUNC-LHS eq $key ?? $sql !! "($sql)");
@@ -595,6 +590,34 @@ class Squirrel {
         }
         ($all-sql, @all-bind);
     }
+
+    role ScalarLiteral does LiteralValue {
+    }
+
+    role ArrayLiteral does LiteralValue {
+    }
+
+    proto method where-special-op(|c) { * }
+
+    multi method where-special-op($handler, $key, $op, Capture $value) {
+        my $val = ($value.list, $value.hash.pairs).flat.Array;
+        $val does ArrayLiteral;
+        self.debug("redispatching special op { $handler } - Capture with { $val.perl }");
+        (samewith $handler, $key, $op, $val).flat;
+    }
+
+    multi method where-special-op($handler, $key, $op, Any:U ) {
+        (samewith $handler, $key, $op, Cool).flat;
+    }
+
+    multi method where-special-op(&handler, Str $key, Str $op, Cool $value) {
+        self.&handler($key, $op, $value).flat;
+    }
+
+    multi method where-special-op(Str $handler, Str $key, Str $op, Cool $value) {
+        self."$handler"($key, $op, $value).flat;
+    }
+
 
     method is-unary-operator(Str $op) returns Bool {
         so @!unary-ops.grep(-> $uo { $op ~~ $uo<regex> });
@@ -851,11 +874,6 @@ sub _where_UNDEF {
         ($sql, @all-bind);
     }
 
-    role ScalarLiteral does LiteralValue {
-    }
-
-    role ArrayLiteral does LiteralValue {
-    }
 
     multi sub sql-literal(@l) {
         @l but ArrayLiteral
@@ -871,7 +889,9 @@ sub _where_UNDEF {
         (samewith $key, $op, @values).flat;
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy, @values where *.elems > 0) {
+    multi method where-field-IN(Str $key, Str $op is copy, @values where { $_ !~~ ArrayLiteral && $_.elems > 0 }) {
+        self.debug("Literal") if @values ~~ ArrayLiteral;
+        self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
         my $label       = self.convert($key, :quote);
         my $placeholder = self.convert('?');
         $op             = self.sqlcase($op);
@@ -892,6 +912,7 @@ sub _where_UNDEF {
                     ($placeholder, $value);
                 }
                 when Pair {
+                    self.debug("pair { $value.perl }");
                     self.where-unary-op($value).flat;
                 }
 
