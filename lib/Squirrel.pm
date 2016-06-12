@@ -1023,7 +1023,7 @@ sub _quote {
                 }
             }
             default {
-                $!array-datatypes ?? $values.item !! $values.list;
+                $!array-datatypes ?? $values.elems > 1 ?? [ $values.item ] !! $values.item !! $values.list;
             }
         }
     }
