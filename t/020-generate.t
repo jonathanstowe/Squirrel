@@ -579,12 +579,10 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
         $range = $only // $from // $to // ^(@tests.elems);
     }
 
-    say $range;
 
 my $s = Squirrel.new(:$debug);
 
 for @tests[$range.list] -> $test {
-    diag $++;
     my $args = $test<args>;
     my @res;
     next unless $test<stmt>;
@@ -595,9 +593,9 @@ for @tests[$range.list] -> $test {
     else {
         $s;
     }
-#     lives-ok {
+     lives-ok {
         @res = $obj."$meth"(|$args);
-#        }, "$meth";
+        }, "$meth";
     is @res[0], $test<stmt>, "$meth SQL looks good";
     my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
     is-deeply @res[1].Array, @bind.Array, "bind values ok";
