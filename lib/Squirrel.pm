@@ -38,7 +38,7 @@ class Squirrel {
     has Str $.sqlfalse  = '0=1';
     has Regex $.injection-guard = rx:i/ \; | ^ \s* go \s /;
 
-    has $.quote-char = ',';
+    has $.quote-char;
 
     method quote-chars() {
         given $!quote-char.elems {
@@ -50,10 +50,6 @@ class Squirrel {
             }
         }
     }
-
-#======================================================================
-# DEBUGGING AND ERROR REPORTING
-#======================================================================
 
     has Bool $.debug = False;
 
@@ -100,10 +96,6 @@ class Squirrel {
         }
     }
 
-
-#======================================================================
-# INSERT methods
-#======================================================================
 
     method insert($table, $data, *%options) {
         my $table-name   = self.table($table);
@@ -413,6 +405,10 @@ class Squirrel {
         (samewith @where, :$!logic).flat;
     }
 
+    multi method build-where(@where, Logic $logic) {
+        (samewith @where, :$logic).flat;
+    }
+
     multi method build-where(@where, Logic :$logic = $!logic) {
         my @clauses = @where;
         self.debug("(Array) got clauses { @where.perl }");
@@ -435,7 +431,7 @@ class Squirrel {
                     self.build-where($el().hash, :$logic).flat;
                 }
                 default {
-                    note "unhandled clause $el";
+                    self.build-where($el, :$logic).flat;
                 }
             }
             if $sql {
@@ -444,7 +440,7 @@ class Squirrel {
             }
         }
 
-        self.debug("got bind { @all-bind }");
+        self.debug("got bind { @all-bind.perl }");
         self.join-sql-clauses($logic, @sql-clauses, @all-bind);
     }
 
@@ -514,14 +510,20 @@ class Squirrel {
 
     # TODO: nested captures and named parts
     multi method build-where(Pair $p ( :$key, Capture :$value), Str :$logic) {
-        my ( $sql, @bind ) = $value.list.flat;
+        self.debug("got capture pair { $p.perl }");
+        my @vals = $value.list.flat;
+        self.debug("got values { @vals.perl }");
+        my $sql = @vals[0];
+        my @bind = @vals[1..*];
+        self.debug("got bind { @bind.perl }");
         $sql = self.quote($key) ~ " $sql";
         ($sql, @bind);
     }
 
     multi method build-where(Capture $value, Str :$logic) {
-        my ( $sql, @bind) = $value.list.flat;
-        ($sql, @bind);
+        self.debug("Capture value");
+        my @vals = $value.list.flat;
+        (@vals[0], @vals[1..*]);
     }
 
     # TODO: this is mostly so that P5 code that looks like a hash but makes a Block works
@@ -548,7 +550,7 @@ class Squirrel {
             $op ~~ s:i/^not_/NOT /;
 
             if $orig-op ~~ m:i/^\-$<logic>=(and|or)/ {
-                ($sql, @bind) = self.build-where($key => $val, logic => ~$/<logic>);
+                ($sql, @bind) = self.build-where($key => $val, logic => ~$/<logic>).flat;
             }
             elsif @!special-ops.grep( -> $so { $op ~~ $so<regex> }).first -> $special-op {
                 self.debug("special op { $special-op<handler> }");
@@ -642,6 +644,7 @@ class Squirrel {
             my $handler = $op-entry<handler>;
             given $handler {
                 when Str {
+                    self.debug("going to call $handler with ( $op , { $rhs.perl })");
                     return self."$handler"($op,$rhs);
                 }
                 when Code {
@@ -706,16 +709,19 @@ class Squirrel {
 
     proto method where-op-BOOL(|c) { * }
 
-    multi method where-op-BOOL(Str $op, Str:D $value) {
+    multi method where-op-BOOL(Str:D $op where !/:i^not/, Str:D $value) {
         self.convert(self.quote($value));
     }
 
-    multi method where-op-BOOL(Str $op, $value) {
+    multi method where-op-BOOL(Str:D $op, $value) {
+        self.build-where($value);
+    }
+    multi method where-op-BOOL(Str:U $op, $value) {
         self.build-where($value);
     }
 
     multi method where-op-BOOL(Str:D $op where m:i/^not/, $value) {
-        my ($s, @b) = samewith Str, $value;
+        my ($s, @b) = (samewith 'bool', $value).flat;
         $s = "(NOT $s)";
         ($s, @b);
     }
@@ -912,6 +918,10 @@ class Squirrel {
         Empty;
     }
 
+    multi method order-by-chunks(Capture $arg) {
+        $arg.list;
+    }
+
     class X::InvalidDirection is Exception {
         has Str $.message = 'key passed to order-by must be "-desc" or "-asc"';
     }
@@ -959,8 +969,11 @@ class Squirrel {
 # highly optimized, as it's called way too often
     proto method quote(|c) { * }
 
+    multi method quote(LiteralValue $label) returns LiteralValue {
+        $label;
+    }
     multi method quote(Str $label) returns Str {
-        $label
+        $label;
     }
 
     multi method quote(Whatever $) {
