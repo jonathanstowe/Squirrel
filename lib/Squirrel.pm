@@ -61,6 +61,10 @@ class Squirrel {
 
     role LiteralValue { }
 
+    role SqlLiteral does LiteralValue {
+    }
+
+
     sub is-literal-value($value) returns Bool {
         $value ~~ LiteralValue;
     }
@@ -163,8 +167,13 @@ class Squirrel {
     }
 
 
+
     multi method build-insert(Capture $data) {
         my ( $sql, @bind ) = $data.list.flat;
+        (samewith(($sql, @bind) but SqlLiteral)).flat;
+    }
+
+    multi method build-insert(SqlLiteral $data ( $sql, @bind)) {
         self.assert-bindval-matches-bindtype(@bind);
         ($sql, @bind);
     }
@@ -235,11 +244,13 @@ class Squirrel {
         (('?'), self.apply-bindtype($column, $v));
     }
 
-    # this is the "special references" in P5
     multi method insert-value(Str $column, Capture $value) {
-        self.debug("capture");
         my ($s, @bind) = $value.list.flat;
-        ($s, @bind);
+        (samewith $column, ($s, @bind) but SqlLiteral).flat;
+    }
+
+    multi method insert-value(Str $column, SqlLiteral $value ( $sql, @bind) ) {
+        ($sql, @bind);
     }
 
     method update(Str $table, %data, :$where, *%options) {
@@ -285,10 +296,13 @@ class Squirrel {
 
     # handle \"foo" type values (the .list in the above exploded it)
     multi method build-update(Pair $p (Str :$key, Capture :$value)) {
-        my $label = self.quote($key);
         my ( $v, @bind) = $value.list.flat;
-        # This could do with some cleaning up
-        ("$label = $v", @bind);
+        (samewith ($key => ( ($v, @bind) but SqlLiteral))).flat;
+    }
+
+    multi method build-update(Pair $p (Str :$key, SqlLiteral :$value ( $sql, @bind))) {
+        my $label = self.quote($key);
+        ("$label { $!cmp } $sql", @bind);
     }
 
     multi method build-update(Pair $p, ( Str :$key, :&value )) {
@@ -335,6 +349,9 @@ class Squirrel {
     }
 
 
+    role Select does LiteralValue {
+    }
+
     proto method select(|c) { * }
 
     multi method select($table, @fields,  :$where, :$order) {
@@ -348,14 +365,8 @@ class Squirrel {
         my ($where-sql, @bind) = self.where($where, $order).flat;
         self.debug("Got bind values { @bind.perl }");
         my $sql = join(' ', self.sqlcase('select'), $fields, self.sqlcase('from'),   $table-name) ~ $where-sql;
-        ($sql, @bind);
+        ($sql, @bind) but Select;
     }
-
-
-#======================================================================
-# DELETE
-#======================================================================
-
 
     method delete($table, :$where) {
         my $table-name = self.table($table);
@@ -366,25 +377,20 @@ class Squirrel {
         ($sql, @bind);
     }
 
+    role Where does LiteralValue {
+    }
 
-#======================================================================
-# WHERE: entry point
-#======================================================================
-
-
-
-# Finally, a separate routine just to handle WHERE clauses
     proto method where(|c) { * }
 
     multi method where(Any:U $where) {
-        ('', ());
+        ('', ()) but Where;
     }
 
     multi method where(Any:D $where) {
         my ($sql, @bind) = self.build-where($where).flat;
         self.debug("got bind values { @bind.perl } ");
         $sql = $sql ?? self.sqlcase(' where ') ~ "( $sql )" !! '';
-        ($sql, @bind);
+        ($sql, @bind) but Where;
     }
 
 
@@ -393,7 +399,7 @@ class Squirrel {
         my ($order-sql, @order-bind) = self.order-by($order).flat;
         $sql ~= $order-sql;
         @bind.append: @order-bind;
-        ($sql, @bind);
+        ($sql, @bind) but Where;
     }
 
 
@@ -468,7 +474,10 @@ class Squirrel {
         self.join-sql-clauses('and', @sql-clauses, @all-bind);
     }
 
-    multi method build-where(Pair $p ( Str :$key where * ~~ /^\-./, :$value), Str :$logic) {
+    role LiteralPair does SqlLiteral {
+    }
+
+    multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value), Str :$logic) {
         my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
         my ( $s, @b) = self.where-unary-op($op, $value).flat;
         $s = "($s)" unless self.is-unary-operator($op) || self.is-nested-func-lhs($key);
@@ -480,13 +489,18 @@ class Squirrel {
         flat ( "$key { self.sqlcase($!cmp) } ?", self.apply-bindtype($key, $value));
     }
 
-    multi method build-where(Pair $p ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 ), Str :$logic) {
-        self.debug("got a pair with an/or op");
-        die "checkpoint";
+
+    multi method build-where(Pair $p where * !~~ LiteralPair ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 ), Str :$logic) {
+        my $new-logic = $key.substr(1).lc;
+        self.debug("got a pair with an/or op will redispatch with logic $new-logic");
+        (samewith @value, logic => $new-logic).flat;
     }
-    multi method build-where(Pair $p ( :$key, :@value where *.elems > 0), Str :$logic is copy) {
+
+
+    multi method build-where(Pair $p where * !~~ LiteralPair ( :$key, :@value where *.elems > 0), Str :$logic is copy) {
         my @values = @value;
         self.debug("pair $key => { @values.perl } logic({ $logic // '<undefined>'})");
+        self.debug($p.WHAT);
         my $op = @values[0].defined && @values[0].can('match') && @values[0] ~~ m:i/^\-[AND|OR]$/ ?? @values.shift !! '';
         my @distributed = @values.map(-> $v { $v ~~ Callable ?? $v().hash !! $v }).map(-> $v { $key => $v });
 
@@ -508,6 +522,7 @@ class Squirrel {
         (self.quote($key) ~ self.sqlcase(" is null"), ());
     }
 
+
     # TODO: nested captures and named parts
     multi method build-where(Pair $p ( :$key, Capture :$value), Str :$logic) {
         self.debug("got capture pair { $p.perl }");
@@ -516,8 +531,14 @@ class Squirrel {
         my $sql = @vals[0];
         my @bind = @vals[1..*];
         self.debug("got bind { @bind.perl }");
-        $sql = self.quote($key) ~ " $sql";
-        ($sql, @bind);
+        (samewith ( $key => ( ($sql, @bind) but SqlLiteral )) but LiteralPair, :$logic ).flat;
+    }
+
+    multi method build-where(LiteralPair $p (:$key, :@value ), Str :$logic) {
+        my $sql = @value[0];
+        my @bind = @value[1..*].flat;
+        my $s = self.quote($key) ~ " $sql";
+        ($s, @bind);
     }
 
     multi method build-where(Capture $value, Str :$logic) {
@@ -590,17 +611,11 @@ class Squirrel {
         ($all-sql, @all-bind);
     }
 
-    role ScalarLiteral does LiteralValue {
-    }
-
-    role ArrayLiteral does LiteralValue {
-    }
-
     proto method where-special-op(|c) { * }
 
     multi method where-special-op($handler, $key, $op, Capture $value) {
         my $val = ($value.list, $value.hash.pairs).flat.Array;
-        $val does ArrayLiteral;
+        $val does SqlLiteral;
         self.debug("redispatching special op { $handler } - Capture with { $val.perl }");
         (samewith $handler, $key, $op, $val).flat;
     }
@@ -687,12 +702,12 @@ class Squirrel {
         self.build-where(@value, logic => $op).flat;
     }
 
-    multi method where-op-ANDOR(Str $op where m:i/^or/, %value) {
+    multi method where-op-ANDOR(Str:D $op where m:i/^or/, %value) {
         my @value = %value.pairs.sort(*.key);
         self.build-where(@value, logic => $op).flat;
     }
 
-    multi method where-op-ANDOR(Str $op where  * !~~ m:i/^or/, %value) {
+    multi method where-op-ANDOR(Str:D $op where { $_  !~~ m:i/^or/ }, %value) {
         self.build-where(%value).flat;
     }
 
@@ -804,11 +819,15 @@ class Squirrel {
 
 
     multi sub sql-literal(@l) {
-        @l but ArrayLiteral
+        @l but SqlLiteral
+    }
+
+    multi sub sql-literal(+@l) {
+        @l but SqlLiteral
     }
 
     multi sub sql-literal($l) {
-        $l but ScalarLiteral
+        $l but SqlLiteral
     }
 
     proto method where-field-IN(|c) { * }
@@ -817,8 +836,8 @@ class Squirrel {
         (samewith $key, $op, @values).flat;
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy, @values where { $_ !~~ ArrayLiteral && $_.elems > 0 }) {
-        self.debug("Literal") if @values ~~ ArrayLiteral;
+    multi method where-field-IN(Str $key, Str $op is copy, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) {
+        self.debug("Literal") if @values ~~ SqlLiteral;
         self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
         my $label       = self.convert($key, :quote);
         my $placeholder = self.convert('?');
@@ -828,10 +847,7 @@ class Squirrel {
 
         for @values -> $value {
             my ( $sql, @bind) = do given $value {
-                when ScalarLiteral {
-                    ($value, Empty);
-                }
-                when ArrayLiteral {
+                when SqlLiteral {
                     my ($sql, @bind) = $value.list;
                     self.assert-bindval-matches-bindtype(@bind);
                     ($sql, @bind);
@@ -856,14 +872,7 @@ class Squirrel {
         return ($sql);
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy, ScalarLiteral $values )  {
-        my $label       = self.convert($key, :quote);
-        $op             = self.sqlcase($op);
-        my $sql = self.open-outer-paren($values);
-        ("$label $op ( $sql )", Empty);
-    }
-
-    multi method where-field-IN(Str $key, Str $op is copy,ArrayLiteral $values ) {
+    multi method where-field-IN(Str $key, Str $op is copy,SqlLiteral $values ) {
         my $label       = self.convert($key, :quote);
         $op             = self.sqlcase($op);
         my ( $sql, @bind) = $values.list;
