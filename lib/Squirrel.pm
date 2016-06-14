@@ -544,6 +544,12 @@ class Squirrel {
     multi method build-where(Capture $value, Str :$logic) {
         self.debug("Capture value");
         my @vals = $value.list.flat;
+        (samewith( (@vals[0], @vals[1..*]) but SqlLiteral, :$logic)).flat;
+    }
+
+    multi method build-where(@value where SqlLiteral, Str :$logic) {
+        self.debug("SqlLiteral");
+        my @vals = @value.flat;
         (@vals[0], @vals[1..*]);
     }
 
