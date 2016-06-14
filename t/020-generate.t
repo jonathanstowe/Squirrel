@@ -583,22 +583,30 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
 my $s = Squirrel.new(:$debug);
 
 for @tests[$range.list] -> $test {
-    my $args = $test<args>;
-    my @res;
     next unless $test<stmt>;
-    my $meth = $test<func>;
-    my $obj = do if $test<new> -> $args {
-        Squirrel.new(|$args, :$debug);
-    }
-    else {
-        $s;
-    }
-     lives-ok {
-        @res = $obj."$meth"(|$args);
+    subtest {
+        my $args = $test<args>;
+        my @res;
+        my $meth = $test<func>;
+        my $obj = do if $test<new> -> $args {
+            Squirrel.new(|$args, :$debug);
+        }
+        else {
+            $s;
+        }
+        lives-ok {
+            CATCH {
+                default {
+                    say $_ if $debug;
+                    $_.rethrow;
+                }
+            }
+            @res = $obj."$meth"(|$args);
         }, "$meth";
-    is @res[0], $test<stmt>, "$meth SQL looks good";
-    my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
-    is-deeply @res[1].Array, @bind.Array, "bind values ok";
+        is @res[0], $test<stmt>, "$meth SQL looks good";
+        my @bind = $test<bind>.map(-> $v { if not $v.defined { $v } else { my $t = $v ~~ Int ?? $v !! $v ~~ Str ?? val($v) !! $v; given $t { when Numeric { +$_ }; when Str { $_.Str }; default { $_ }}}});
+        is-deeply @res[1].Array, @bind.Array, "bind values ok";
+    }, "generate test " ~ $++;
 }
 
 
