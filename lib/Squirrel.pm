@@ -1,5 +1,16 @@
 use v6.c;
 
+=begin pod
+
+=head1 NAME
+
+Squirrel -  sql generator
+
+
+
+
+=end pod
+
 class Squirrel {
 
     has $.array-datatypes;
