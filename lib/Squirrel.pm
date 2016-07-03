@@ -7,6 +7,23 @@ use v6.c;
 Squirrel -  sql generator
 
 
+=head1 SYNOPSIS
+
+=begin code
+
+use Squirrel;
+
+my $s = Squirrel.new;
+
+my ($sql, @bind) = $s.select('foo', *, where => bar => 3); # "select * from foo where bar = ?", [3];
+
+=end code
+
+=head1 DESCRIPTION
+
+
+=head1 METHODS
+
 
 
 =end pod
