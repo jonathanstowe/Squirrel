@@ -378,7 +378,7 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
 
 	my $s = Squirrel.new(:$debug);
 
-	for @tests[$range.list] -> $test {
+	for @tests[$range.list].pick(18) -> $test {
         subtest {
     	my @res;
 
