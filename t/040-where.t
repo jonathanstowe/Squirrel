@@ -370,7 +370,7 @@ my @tests = (
 
 my $s = Squirrel.new(:$debug);
 
-for @tests -> $test {
+for @tests.pick(18) -> $test {
     subtest {
     	my @res;
         lives-ok {
@@ -380,6 +380,7 @@ for @tests -> $test {
         is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
     }, "where test " ~ $++;
 }
+
 done-testing;
 
 

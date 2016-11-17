@@ -32,24 +32,6 @@ class Squirrel {
 
     has $.array-datatypes;
 
-    # TODO: clearly this hack is better served by a multi with a regex where
-    has @.special-ops = (
-        {regex => rx:i/^ ( not \s )? between $/, handler => 'where-field-BETWEEN'},
-        {regex => rx:i/^ ( not \s )? in      $/, handler => 'where-field-IN'},
-        {regex => rx:i/^ ident                 $/, handler => 'where-op-IDENT'},
-        {regex => rx:i/^ value                 $/, handler => 'where-op-VALUE'},
-        {regex => rx:i/^ is ( \s+ not )?     $/, handler => 'where-field-IS'},
-    );
-
-    has @.unary-ops = (
-        { regex => rx:i/^ and  ( [_\s]? \d+ )? $/, handler => 'where-op-ANDOR' },
-        { regex => rx:i/^ or   ( [_\s]? \d+ )? $/, handler => 'where-op-ANDOR' },
-        { regex => rx:i/^ nest ( [_\s]? \d+ )? $/, handler => 'where-op-NEST' },
-        { regex => rx:i/^ ( not \s )? bool     $/, handler => 'where-op-BOOL' },
-        { regex => rx:i/^ ident                  $/, handler => 'where-op-IDENT' },
-        { regex => rx:i/^ value                  $/, handler => 'where-op-VALUE' },
-    );
-
     has Str $.case where 'lower'|'upper' = 'upper';
     has Str $.logic where 'OR'|'AND' = 'OR';
     has Str $.bindtype = 'normal';
@@ -508,7 +490,6 @@ class Squirrel {
     multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value), Str :$logic) {
         my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
         my ( $s, @b) = self.where-unary-op($op, $value).flat;
-        $s = "($s)" unless self.is-unary-operator($op) || self.is-nested-func-lhs($key);
         ($s, @b);
     }
 
@@ -607,10 +588,9 @@ class Squirrel {
             if $orig-op ~~ m:i/^\-$<logic>=(and|or)/ {
                 ($sql, @bind) = self.build-where($key => $val, logic => ~$/<logic>).flat;
             }
-            elsif @!special-ops.grep( -> $so { $op ~~ $so<regex> }).first -> $special-op {
-                self.debug("special op { $special-op<handler> }");
-                ($sql, @bind) = self.where-special-op($special-op<handler>, $key, $op, $val).flat;
-
+            elsif self.use-special-op($key, $op, $val) {
+                self.debug("use-special-up said yes to $key $op $val");
+                ($sql, @bind) = self.where-special-op($key, $op, $val).flat;
             }
             else {
                 given $val {
@@ -645,37 +625,19 @@ class Squirrel {
         ($all-sql, @all-bind);
     }
 
+    method use-special-op($key, $op, $value) {
+        ?self.^lookup('where-special-op').cando(Capture.from-args(self, $key, $op, $value))
+    }
+
     proto method where-special-op(|c) { * }
 
-    multi method where-special-op($handler, $key, $op, Capture $value) {
+    multi method where-special-op($key, $op, Capture $value) {
         my $val = ($value.list, $value.hash.pairs).flat.Array;
         $val does SqlLiteral;
-        self.debug("redispatching special op { $handler } - Capture with { $val.perl }");
-        (samewith $handler, $key, $op, $val).flat;
+        self.debug("redispatching special op - Capture with { $val.perl }");
+        (samewith $key, $op, $val).flat;
     }
 
-    multi method where-special-op($handler, $key, $op, Any:U ) {
-        (samewith $handler, $key, $op, Cool).flat;
-    }
-
-    multi method where-special-op(&handler, Str $key, Str $op, Cool $value) {
-        self.&handler($key, $op, $value).flat;
-    }
-
-    multi method where-special-op(Str $handler, Str $key, Str $op, Cool $value) {
-        self."$handler"($key, $op, $value).flat;
-    }
-
-
-    method is-unary-operator(Str $op) returns Bool {
-        so @!unary-ops.grep(-> $uo { $op ~~ $uo<regex> });
-    }
-
-    method is-nested-func-lhs(Str $key) returns Bool {
-        $*NESTED-FUNC-LHS && $*NESTED-FUNC-LHS eq $key;
-    }
-
-    
     class X::IllegalOperator is Exception {
         has Str $.op is required;
         method message() returns Str {
@@ -683,28 +645,7 @@ class Squirrel {
         }
     }
 
-    method where-unary-op(Str $op, $rhs) {
-
-        if !$*NESTED-FUNCTION-LHS and @!special-ops.grep(-> $so { $op ~~ $so<regex> }) {
-            X::IllegalOperator.new(:$op).throw;
-        }
-
-        if @!unary-ops.grep(-> $uo { $op ~~ $uo<regex> }).first -> $op-entry {
-            my $handler = $op-entry<handler>;
-            given $handler {
-                when Str {
-                    self.debug("going to call $handler with ( $op , { $rhs.perl })");
-                    return self."$handler"($op,$rhs);
-                }
-                when Code {
-                    return self.$handler($op,$rhs);
-                }
-                default {
-                    die "not a valid op handler";
-                }
-
-            }
-        }
+    multi method where-unary-op(Str $op, $rhs) {
 
         self.debug("Generic unary OP: $op - recursing as function");
 
@@ -730,64 +671,55 @@ class Squirrel {
         return ($sql, @bind);
     }
 
-    proto method where-op-ANDOR(|c) { * }
 
-    multi method where-op-ANDOR(Str $op,  @value) {
+    # not really enhancing the reputation with regard to the line-noise thing 
+    multi method where-unary-op(Str $op where /:i^ and  ( [_\s]? \d+ )? $/|/:i^ or   ( [_\s]? \d+ )? $/,  @value) {
         self.build-where(@value, logic => $op).flat;
     }
 
-    multi method where-op-ANDOR(Str:D $op where m:i/^or/, %value) {
+    multi method where-unary-op(Str:D $op where /:i^ or   ( [_\s]? \d+ )? $/, %value) {
         my @value = %value.pairs.sort(*.key);
         self.build-where(@value, logic => $op).flat;
     }
 
-    multi method where-op-ANDOR(Str:D $op where { $_  !~~ m:i/^or/ }, %value) {
+    multi method where-unary-op(Str:D $op where /:i^ and  ( [_\s]? \d+ )? $/, %value) {
         self.build-where(%value).flat;
     }
 
-    proto method where-op-NEST(|c) { * }
-    
-    multi method where-op-NEST(Str $op, Str:D $value) {
+    multi method where-unary-op(Str $op where /:i^ nest ( [_\s]? \d+ )? $/, Str:D $value) {
         ($value);
     }
     
-    multi method where-op-NEST(Str $op, $value) {
+    multi method where-unary-op(Str $op where /:i^ nest ( [_\s]? \d+ )? $/, $value) {
         self.build-where($value).flat;
 
     }
 
-    proto method where-op-BOOL(|c) { * }
 
-    multi method where-op-BOOL(Str:D $op where !/:i^not/, Str:D $value) {
+    multi method where-unary-op(Str:D $op where /:i^  bool   $/, Str:D $value) {
         self.convert(self.quote($value));
     }
 
-    multi method where-op-BOOL(Str:D $op, $value) {
-        self.build-where($value);
-    }
-    multi method where-op-BOOL(Str:U $op, $value) {
+    multi method where-unary-op(Str:D $op where /:i^ ( not \s )? bool     $/, $value) {
         self.build-where($value);
     }
 
-    multi method where-op-BOOL(Str:D $op where m:i/^not/, $value) {
+    multi method where-unary-op(Str:D $op where m:i/^ ( not \s ) bool     $/, $value) {
         my ($s, @b) = (samewith 'bool', $value).flat;
         $s = "(NOT $s)";
         ($s, @b);
     }
 
-    proto method where-op-IDENT(|c) { * }
-
-    multi method where-op-IDENT(Str $op, Cool $lhs, Cool $rhs) {
+    multi method where-unary-op(Str $op where m:i/^ ident                  $/, Cool $lhs, Cool $rhs) {
         self.convert(self.quote($lhs)) ~ " = " ~ self.convert(self.quote($rhs));
     }
 
-    proto method where-op-VALUE(|c) { * }
     
-    multi method where-op-VALUE(Str $op, Cool $lhs, Cool:U $rhs?) {
+    multi method where-unary-op(Str $op where m:i/^ value                  $/, Cool $lhs, Cool:U $rhs?) {
         defined $lhs ?? self.convert(self.quote($lhs)) ~ ' IS NULL' !! Any;
     }
 
-    multi method where-op-VALUE(Str $op, Cool $lhs, Cool:D $rhs) {
+    multi method where-unary-op(Str $op where m:i/^ value                  $/, Cool $lhs, Cool:D $rhs) {
         my @bind = self.apply-bindtype( $lhs.defined ?? $lhs !! $*NESTED-FUNC-LHS // Any, $rhs).flat;
         $lhs ?? (self.convert(self.quote($lhs)) ~ ' = ' ~ self.convert('?'), @bind) !! (self.convert('?'), @bind);
     }
@@ -795,9 +727,7 @@ class Squirrel {
 
 
 
-    proto method where-field-IS(|c) { * }
-
-    multi method where-field-IS(Str $key, Str $op, Any:U $) {
+    multi method where-special-op(Str $key, Str $op where /:i^ is ( \s+ not )?     $/, Any:U $) {
         (self.convert(self.quote($key)), ($op, 'null').map(-> $v { self.sqlcase($v) })).join(' ');
 
     }
@@ -823,9 +753,9 @@ class Squirrel {
     }
 
 
-    proto method where-field-BETWEEN(|c) { * }
 
-    multi method where-field-BETWEEN(Str $key, Str $op is copy, @values where *.elems == 2 ) {
+    # BETWEEN
+    multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) {
         my $label           = self.convert($key, :quote);
         my $and             = ' ' ~ self.sqlcase('and') ~ ' ';
         my $placeholder     = self.convert('?');
@@ -864,13 +794,11 @@ class Squirrel {
         $l but SqlLiteral
     }
 
-    proto method where-field-IN(|c) { * }
-
-    multi method where-field-IN(Str $key, Str $op, *@values) {
+    multi method where-special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) {
         (samewith $key, $op, @values).flat;
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) {
+    multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) {
         self.debug("Literal") if @values ~~ SqlLiteral;
         self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
         my $label       = self.convert($key, :quote);
@@ -901,12 +829,12 @@ class Squirrel {
         ( sprintf('%s %s ( %s )', $label, $op, @all-sql.join(', ')), self.apply-bindtype($key, @all-bind),).flat;
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy, @values where *.elems == 0) {
+    multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) {
         my $sql = $op ~~ m:i/\bnot\b/ ?? $!sqltrue !! $!sqlfalse;
         return ($sql);
     }
 
-    multi method where-field-IN(Str $key, Str $op is copy,SqlLiteral $values ) {
+    multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) {
         my $label       = self.convert($key, :quote);
         $op             = self.sqlcase($op);
         my ( $sql, @bind) = $values.list;
@@ -926,10 +854,6 @@ class Squirrel {
         $sql;
     }
 
-
-#======================================================================
-# ORDER BY
-#======================================================================
 
     method order-by($arg) {
         my (@sql, @bind);
@@ -1005,11 +929,6 @@ class Squirrel {
     }
 
 
-#======================================================================
-# UTILITY FUNCTIONS
-#======================================================================
-
-# highly optimized, as it's called way too often
     proto method quote(|c) { * }
 
     multi method quote(LiteralValue $label) returns LiteralValue {
@@ -1026,35 +945,6 @@ class Squirrel {
     multi method quote('*') {
         '*';
     }
-
-=begin reference
-
-sub _quote {
-  # my ($self, $label) = @_;
-
-  return '' unless defined @_[1];
-  return $(@_[1]) if ref(@_[1]) eq 'SCALAR';
-
-  @_[0].{'quote_char'} or
-    (@_[0]._assert_pass_injection_guard(@_[1]), return @_[1]);
-
-  my $qref = ref @_[0].{'quote_char'};
-  my ($l, $r) =
-      ?^$qref             ?? (@_[0].{'quote_char'}, @_[0].{'quote_char'})
-    !! ($qref eq 'ARRAY') ?? @(@_[0].{'quote_char'})
-    !! puke "Unsupported quote_char format: $_[0].{"quote_char"}";
-
-  my $esc = @_[0].{'escape_char'} || $r;
-
-  # parts containing * are naturally unquoted
-  return join( @_[0].{'name_sep'}||'', map
-    {+( $_ eq '*' ?? $_ !! do { (my $n = $_) ~~ s:c:P5/(\Q$esc\E|\Q$r\E)/$esc$1/; $l ~ $n ~ $r } )},
-    ( @_[0].{'name_sep'} ?? split (m:P5/\Q$_[0]->{name_sep}\E/, @_[1] ) !! @_[1] )
-  );
-}
-
-=end reference
-
 
     method convert($arg, Bool :$quote = False) {
         my $convert-arg = $quote ?? self.quote($arg) !! $arg;
@@ -1119,6 +1009,5 @@ sub _quote {
     }
 
 }
-
 
 # vim: expandtab shiftwidth=4 ft=perl6
