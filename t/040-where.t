@@ -6,6 +6,8 @@ use Test;
 
 use Squirrel;
 
+my Bool $debug;
+
 # This is only testing the non-transitional syntax
 my @tests = (
     {
@@ -366,32 +368,19 @@ my @tests = (
     },
 );
 
-multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
+my $s = Squirrel.new(:$debug);
 
-    my $range;
-    if $from.defined && $to.defined {
-        $range = $from .. $to;
-    }
-    else {
-        $range = $only // $from // $to // ^(@tests.elems);
-    }
-
-	my $s = Squirrel.new(:$debug);
-
-	for @tests[$range.list].pick(18) -> $test {
-        subtest {
+for @tests -> $test {
+    subtest {
     	my @res;
-
-            lives-ok {
-    	        @res = ( $test<order> ?? $s.where($test<where>, $test<order>) !!  $s.where($test<where>) );
-            }, "get where";
-            is @res[0], $test<stmt>, "got the SQL expected";
-            is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
-        }, "where test " ~ $++;
-
-	}
-    done-testing;
+        lives-ok {
+    	    @res = ( $test<order> ?? $s.where($test<where>, $test<order>) !!  $s.where($test<where>) );
+        }, "get where";
+        is @res[0], $test<stmt>, "got the SQL expected";
+        is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
+    }, "where test " ~ $++;
 }
+done-testing;
 
 
 

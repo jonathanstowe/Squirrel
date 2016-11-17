@@ -582,8 +582,8 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
 
 my $s = Squirrel.new(:$debug);
 
-for @tests[$range.list].pick(18) -> $test {
-    next unless $test<stmt>;
+for @tests -> $test {
+    next if ( not $test<stmt>:exists or $test<args> ~~ Capture );
     subtest {
         my $args = $test<args>;
         my @res;
