@@ -96,8 +96,8 @@ my @tests =
       {
               func   => 'delete',
               args   => \((<test1 test2 test3>),
-                         where => { 'test1.field' => \'!= test2.field',
-                            user => {'!=','nwiger'} },
+                         where => { 'test1.field' => SQL('!= test2.field'),
+                            user => {'!=' => 'nwiger'} },
                         ),
               stmt   => 'DELETE FROM test1, test2, test3 WHERE ( ( ( test1.field != test2.field ) AND ( user != ? ) ) )',
               stmt_q => 'DELETE FROM `test1`, `test2`, `test3` WHERE ( `test1`.`field` != test2.field AND `user` != ? )', 
@@ -141,28 +141,28 @@ my @tests =
       },
       {
               func   => 'update',
-              args   => \('test', {a => 1, b => 2, c => 3, d => 4, e => 5}, where => {a => {'in', (1..5)}}),
+              args   => \('test', {a => 1, b => 2, c => 3, d => 4, e => 5}, where => {a => {'in' => (1..5)}}),
               stmt   => 'UPDATE test SET a = ?, b = ?, c = ?, d = ?, e = ? WHERE ( a IN ( ?, ?, ?, ?, ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = ?, `c` = ?, `d` = ?, `e` = ? WHERE ( `a` IN ( ?, ?, ?, ?, ? ) )',
               bind   => (qw/1 2 3 4 5 1 2 3 4 5/),
       },
       {
               func   => 'update',
-              args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => {a => {'between' => (1,2)}}),
+              args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => { a => { between => (1,2), } }),
               stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = to_date(?, \'MM/DD/YY\') WHERE ( `a` BETWEEN ? AND ? )',
               bind   => (<1 02/02/02 1 2>),
       },
       {
               func   => 'insert',
-              args   => ('test.table', {high_limit => \'max(all_limits)', low_limit => 4} ),
+              args   => ('test.table', {high_limit => SQL('max(all_limits)'), low_limit => 4} ),
               stmt   => 'INSERT INTO test.table (high_limit, low_limit) VALUES (max(all_limits), ?)',
               stmt_q => 'INSERT INTO `test`.`table` (`high_limit`, `low_limit`) VALUES (max(all_limits), ?)',
               bind   => ('4'),
       },
       {
               func   => 'insert',
-              args   => ('test.table', ( \'max(all_limits)', 4 ) ),
+              args   => ('test.table', ( SQL('max(all_limits)'), 4 ) ),
               stmt   => 'INSERT INTO test.table VALUES (max(all_limits), ?)',
               stmt_q => 'INSERT INTO `test`.`table` VALUES (max(all_limits), ?)',
               bind   => ('4'),
@@ -204,7 +204,7 @@ my @tests =
       {
               func   => 'select',
               args   => \('Yo Momma', '*', where => { user => 'nwiger',
-                                       -nest => ( workhrs => {'>', 20}, geo => 'ASIA' ) }),
+                                       -nest => ( workhrs => {'>' => 20}, geo => 'ASIA' ) }),
               stmt   => 'SELECT * FROM Yo Momma WHERE ( ( ( ( ( workhrs > ? ) OR ( geo = ? ) ) ) AND ( user = ? ) ) )',
               stmt_q => 'SELECT * FROM `Yo Momma` WHERE ( ( ( `workhrs` > ? ) OR ( `geo` = ? ) ) AND `user` = ? )',
               bind   => (<20 ASIA nwiger>),
@@ -212,9 +212,9 @@ my @tests =
       {
               func   => 'update',
               args   => \('taco_punches', { one => 2, three => 4 },
-                                         where => { bland => ( -and => {'!=', 'yes'}, {'!=', 'YES'} ),
-                                           tasty => { '!=', (<yes YES>) },
-                                           -nest => ( face => ( -or => {'=', 'mr.happy'}, {'=', Any} ) ) },
+                                         where => { bland => ( -and => {'!=' => 'yes'}, {'!=' => 'YES'} ),
+                                           tasty => { '!=' => (<yes YES>) },
+                                           -nest => ( face => ( -or => {'=' => 'mr.happy'}, {'=' => Any} ) ) },
                         ),
 
               stmt   => 'UPDATE taco_punches SET one = ?, three = ? WHERE ( ( ( ( ( face = ? ) OR ( face IS NULL ) ) ) AND ( ( ( bland != ? ) OR ( bland != ? ) ) ) AND ( ( ( tasty != ? ) OR ( tasty != ? ) ) ) ) )',
@@ -233,7 +233,7 @@ my @tests =
               func   => 'update',
               args   => \('fhole', {fpoles => 4}, where => (
                           { race => (<-or black white asian>) },
-                          { -nest => { firsttime => (-or => {'=','yes'}, Any) } },
+                          { -nest => { firsttime => (-or => {'=' => 'yes'}, Any) } },
                           { -and => ( { firstname => {-not_like => 'candace'} }, { lastname => {-in => (<jugs canyon towers>) } } ) },
                         ) ),
               stmt   => 'UPDATE fhole SET fpoles = ? WHERE ( ( ( ( ( race = ? ) OR ( race = ? ) OR ( race = ? ) ) ) OR ( ( ( firsttime = ? ) OR ( firsttime IS NULL ) ) ) OR ( ( ( firstname NOT LIKE ? ) AND ( lastname IN ( ?, ?, ? ) ) ) ) ) )',
@@ -241,14 +241,14 @@ my @tests =
       },
       {
               func   => 'insert',
-              args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", '02/02/02')}),
+              args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               bind   => (<1 02/02/02>),
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => \("= to_date(?, 'MM/DD/YY')", '02/02/02')}),
+              args   => \('test', '*', where => { a => SQL("= to_date(?, 'MM/DD/YY')", '02/02/02')}),
               stmt   => q{SELECT * FROM test WHERE ( a = to_date(?, 'MM/DD/YY') )},
               stmt_q => q{SELECT * FROM `test` WHERE ( `a` = to_date(?, 'MM/DD/YY') )},
               bind   => ('02/02/02'),
@@ -287,14 +287,14 @@ my @tests =
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => {'>' =>  \'1 + 1'}, b => 8 }),
+              args   => \('test', '*', where => { a => {'>' =>  SQL('1 + 1')}, b => 8 }),
               stmt   => 'SELECT * FROM test WHERE ( ( ( a > 1 + 1 ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` > 1 + 1 AND `b` = ? )',
               bind   => (8),
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, b => 8 }),
+              args   => \('test', '*', where => { a => {'<' => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, b => 8 }),
               stmt   => 'SELECT * FROM test WHERE ( ( ( a < to_date(?, \'MM/DD/YY\') ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => ('02/02/02', 8),
@@ -308,28 +308,28 @@ my @tests =
       },
       {
               func   => 'update',
-              args   => \('test', {a => 1, b => \("42") }, where => {a => {'between', (1,2)}}),
+              args   => \('test', {a => 1, b => SQL("42") }, where => {a => {'between' => (1,2)}}),
               stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = 42 WHERE ( `a` BETWEEN ? AND ? )',
               bind   => (<1 1 2>),
       },
       {
               func   => 'insert',
-              args   => ('test', {a => 1, b => \("42")}),
+              args   => ('test', {a => 1, b => SQL("42")}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, 42)',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, 42)',
               bind   => (<1>),
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => \("= 42"), b => 1}),
+              args   => \('test', '*', where => { a => SQL("= 42"), b => 1}),
               stmt   => q{SELECT * FROM test WHERE ( ( ( a = 42 ) AND ( b = ? ) ) )},
               stmt_q => q{SELECT * FROM `test` WHERE ( `a` = 42 ) AND ( `b` = ? )},
               bind   => (1,),
       },
       {
               func   => 'select',
-              args   => \('test', '*', where => { a => {'<' => \("42")}, b => 8 }),
+              args   => \('test', '*', where => { a => {'<' => SQL("42")}, b => 8 }),
               stmt   => 'SELECT * FROM test WHERE ( ( ( a < 42 ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < 42 AND `b` = ? )',
               bind   => (8,),
@@ -337,7 +337,7 @@ my @tests =
       {
               func   => 'insert',
               new    => {bindtype => 'columns'},
-              args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
+              args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               bind   => ((a => 1), (dummy => '02/02/02')),
@@ -345,7 +345,7 @@ my @tests =
       {
               func   => 'update',
               new    => {bindtype => 'columns'},
-              args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, where => {a => {'between' => (1,2)}}),
+              args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, where => {a => {'between' => (1,2)}}),
               stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
               stmt_q => 'UPDATE `test` SET `a` = ?, `b` = to_date(?, \'MM/DD/YY\') WHERE ( `a` BETWEEN ? AND ? )',
               bind   => ((a => 1), (dummy => '02/02/02'), (a => 1), (a => 2)),
@@ -353,7 +353,7 @@ my @tests =
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => \("= to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
+              args   => \('test', '*', where => { a => SQL("= to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
               stmt   => q{SELECT * FROM test WHERE ( a = to_date(?, 'MM/DD/YY') )},
               stmt_q => q{SELECT * FROM `test` WHERE ( `a` = to_date(?, 'MM/DD/YY') )},
               bind   => ((dummy => '02/02/02')),
@@ -361,7 +361,7 @@ my @tests =
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, b => 8 }),
+              args   => \('test', '*', where => { a => {'<' => SQL("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, b => 8 }),
               stmt   => 'SELECT * FROM test WHERE ( ( ( a < to_date(?, \'MM/DD/YY\') ) AND ( b = ? ) ) )',
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` < to_date(?, \'MM/DD/YY\') AND `b` = ? )',
               bind   => ((dummy => '02/02/02'), (b => 8)),
@@ -369,22 +369,24 @@ my @tests =
       {
               func   => 'insert',
               new    => {bindtype => 'columns'},
-              args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", '02/02/02')}),
+              args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}),
       },
       {
               func   => 'update',
               new    => {bindtype => 'columns'},
-              args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => {a => {'between', (1,2)}}),
+              args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => {a => { 'between' => (1,2)}}),
+              stmt  => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY') WHERE ( ( a BETWEEN ? AND ? ) )",
+              bind  => $[:a(1), "02/02/02", [:a(1), :a(2)]],
       },
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => \("= to_date(?, 'MM/DD/YY')", '02/02/02')}),
+              args   => \('test', '*', where => { a => SQL("= to_date(?, 'MM/DD/YY')", '02/02/02')}),
       },
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => {'<' => \("to_date(?, 'MM/DD/YY')", '02/02/02')}, b => 8 }),
+              args   => \('test', '*', where => { a => {'<' => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, b => 8 }),
       },
       {
               func   => 'select',
@@ -393,7 +395,7 @@ my @tests =
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => {-in => \("(SELECT d FROM to_date(?, 'MM/DD/YY') AS d)", (dummy => '02/02/02')), }, b => 8 }),
+              args   => \('test', '*', where => { a => {-in => SQL("(SELECT d FROM to_date(?, 'MM/DD/YY') AS d)", (dummy => '02/02/02')), }, b => 8 }),
               stmt   => "SELECT * FROM test WHERE ( ( ( a IN ( SELECT d FROM to_date(?, 'MM/DD/YY') AS d ) ) AND ( b = ? ) ) )",
               stmt_q => 'SELECT * FROM `test` WHERE ( `a` IN (SELECT d FROM to_date(?, \'MM/DD/YY\') AS d) AND `b` = ? )',
               bind   => ((dummy => '02/02/02'), (b => 8)),
@@ -401,12 +403,12 @@ my @tests =
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => {-in => \("(SELECT d FROM to_date(?, 'MM/DD/YY') AS d)", '02/02/02')}, b => 8 }),
+              args   => \('test', '*', where => { a => {-in => SQL("(SELECT d FROM to_date(?, 'MM/DD/YY') AS d)", '02/02/02')}, b => 8 }),
       },
       {
               func   => 'insert',
               new    => {bindtype => 'columns'},
-              args   => ('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
+              args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               stmt_q => 'INSERT INTO `test` (`a`, `b`) VALUES (?, to_date(?, \'MM/DD/YY\'))',
               bind   => ((a => 1), ({dummy => 1} => '02/02/02')),
@@ -414,7 +416,7 @@ my @tests =
       {
               func   => 'update',
               new    => {bindtype => 'columns'},
-              args   => \('test', {a => 1, b => \("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02')), c => { '-lower' => 'foo' }}, where => {a => {'between', (1,2)}}),
+              args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02')), c => { '-lower' => 'foo' }}, where => {a => {'between', (1,2)}}),
               stmt   => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY'), c = LOWER ? WHERE ( ( a BETWEEN ? AND ? ) )",
               stmt_q => "UPDATE `test` SET `a` = ?, `b` = to_date(?, 'MM/DD/YY'), `c` = LOWER ? WHERE ( `a` BETWEEN ? AND ? )",
               bind   => ((a => 1), ({dummy => 1} => '02/02/02'), (c => 'foo'), (a => 1), (a => 2)),
@@ -422,7 +424,7 @@ my @tests =
       {
               func   => 'select',
               new    => {bindtype => 'columns'},
-              args   => \('test', '*', where => { a => \("= to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
+              args   => \('test', '*', where => { a => SQL("= to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
               stmt   => q{SELECT * FROM test WHERE ( a = to_date(?, 'MM/DD/YY') )},
               stmt_q => q{SELECT * FROM `test` WHERE ( `a` = to_date(?, 'MM/DD/YY') )},
               bind   => (({dummy => 1} => '02/02/02')),
@@ -582,8 +584,9 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
 
 my $s = Squirrel.new(:$debug);
 
-for @tests -> $test {
-    next if ( not $test<stmt>:exists or $test<args> ~~ Capture );
+say $range;
+for @tests[$range.list] -> $test {
+    say $test.perl;
     subtest {
         my $args = $test<args>;
         my @res;

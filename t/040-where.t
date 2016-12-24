@@ -6,8 +6,6 @@ use Test;
 
 use Squirrel;
 
-my Bool $debug;
-
 # This is only testing the non-transitional syntax
 my @tests = (
     {
@@ -74,7 +72,7 @@ my @tests = (
             status   => 'completed',
             completion_date => { 'between' => ['2002-10-01', '2003-02-06'] },
         },
-        order => \'ticket, requestor',
+        order => SQL('ticket, requestor'),
         stmt => " WHERE ( ( ( ( completion_date BETWEEN ? AND ? ) ) AND ( status = ? ) ) ) ORDER BY ticket, requestor",
         bind => [qw/2002-10-01 2003-02-06 completed/],
     },
@@ -98,7 +96,7 @@ my @tests = (
     {
         where => {
             priority  => [ {'>' => 3}, {'<' => 1} ],
-            requestor => \'is not null',
+            requestor => SQL('is not null'),
         },
         order => 'priority',
         stmt => " WHERE ( ( ( ( ( priority > ? ) OR ( priority < ? ) ) ) AND ( requestor is not null ) ) ) ORDER BY priority",
@@ -128,7 +126,7 @@ my @tests = (
             priority  => { 'between' => [1, 3] },
             requestor => { 'like' => Any },
         },
-        order => \'requestor, ticket',
+        order => SQL('requestor, ticket'),
         stmt => ' WHERE ( ( ( ( priority BETWEEN ? AND ? ) ) AND ( requestor IS NULL ) ) ) ORDER BY requestor, ticket',
         bind => [1,3],
     },
@@ -142,7 +140,7 @@ my @tests = (
            '>'  => 10,
           },
         },
-        stmt => ' WHERE ( ( ( id = ? ) AND ( ( ( num <= ? ) AND ( num > ? ) )  ) ) )',
+        stmt => ' WHERE ( ( ( id = ? ) AND ( ( ( num <= ? ) AND ( num > ? ) ) ) ) )',
         bind => [1,20,10],
     },
 
@@ -177,10 +175,10 @@ my @tests = (
 
     {
         where => {
-            foo => \["IN (?, ?)", 22, 33],
-            bar => ["-and" =>  \["> ?", 44], \["< ?", 55] ],
+            foo => SQL("IN (?, ?)", 22, 33),
+            bar => {"-and" =>  (SQL("> ?", 44), SQL("< ?", 55)) },
         },
-        stmt => ' WHERE ( ( ( ( ( bar > ? ) OR ( bar < ? ) ) ) AND ( foo IN (?, ?) ) ) )',
+        stmt => ' WHERE ( ( ( ( ( bar > ? ) AND ( bar < ? ) ) ) AND ( foo IN (?, ?) ) ) )',
         bind => [44, 55, 22, 33],
     },
 
@@ -205,19 +203,13 @@ my @tests = (
    },
 
    {
-       where => \[ 'foo = ?','bar' ],
+       where => SQL('foo = ?','bar' ),
        stmt => " WHERE ( foo = ? )",
        bind => [ "bar" ],
    },
 
    {
-       where => [ \[ 'foo = ?','bar' ] ],
-       stmt => " WHERE ( foo = ? )",
-       bind => [ "bar" ],
-   },
-
-   {
-       where => { "-bool" => \'function(x)' },
+       where => { "-bool" => SQL('function(x)') },
        stmt => ' WHERE ( function(x) )',
        bind => [],
    },
@@ -241,38 +233,38 @@ my @tests = (
    },
 
    {
-       where => { "-not_bool" => \'function(x)' },
-       stmt => ' WHERE ( (NOT function(x)) )',
+       where => { "-not_bool" => SQL('function(x)') },
+       stmt => ' WHERE ( NOT function(x) )',
        bind => [],
    },
 
    {
        where => { "-not_bool" => 'foo' },
-       stmt => ' WHERE ( (NOT foo) )',
+       stmt => ' WHERE ( NOT foo )',
        bind => [],
    },
 
    {
        where => { "-and" => ["-not_bool" => 'foo', "-not_bool" => 'bar'] },
-       stmt => ' WHERE ( ( ( (NOT foo) ) AND ( (NOT bar) ) ) )',
+       stmt => ' WHERE ( ( ( NOT foo ) AND ( NOT bar ) ) )',
        bind => [],
    },
 
    {
        where => { "-or" => ["-not_bool" => 'foo', "-not_bool" => 'bar'] },
-       stmt => ' WHERE ( ( ( (NOT foo) ) OR ( (NOT bar) ) ) )',
+       stmt => ' WHERE ( ( ( NOT foo ) OR ( NOT bar ) ) )',
        bind => [],
    },
 
    {
-       where => { "-bool" => \['function(?)', 20]  },
+       where => { "-bool" => SQL('function(?)', 20)  },
        stmt => " WHERE ( function(?) )",
        bind => [20],
    },
 
    {
-       where => { "-not_bool" => \['function(?)', 20]  },
-       stmt => ' WHERE ( (NOT function(?)) )',
+       where => { "-not_bool" => SQL('function(?)', 20)  },
+       stmt => ' WHERE ( NOT function(?) )',
        bind => [20],
    },
 
@@ -290,35 +282,35 @@ my @tests = (
 
    {
        where => { "-not_bool" => { a => 1, b => 2}  },
-       stmt => ' WHERE ( (NOT ( ( a = ? ) AND ( b = ? ) )) )',
+       stmt => ' WHERE ( NOT ( ( a = ? ) AND ( b = ? ) ) )',
        bind => [1, 2],
    },
 
    {
        where => { "-not_bool" => [ a => 1, b => 2] },
-       stmt => ' WHERE ( (NOT ( ( a = ? ) OR ( b = ? ) )) )',
+       stmt => ' WHERE ( NOT ( ( a = ? ) OR ( b = ? ) ) )',
        bind => [1, 2],
    },
 
    {
        where => { bool1 => { '=' => { "-not_bool" => 'bool2' } } },
-       stmt => " WHERE ( bool1 = (NOT bool2) )",
+       stmt => " WHERE ( bool1 = NOT bool2 )",
        bind => [],
    },
    {
        where => { "-not_bool" => { "-not_bool" => { "-not_bool" => 'bool2' } } },
-       stmt => ' WHERE ( (NOT (NOT (NOT bool2))) )',
+       stmt => ' WHERE ( NOT NOT NOT bool2 )',
        bind => [],
    },
 
    {
-       where => { timestamp => { '!=' => { "-trunc" => { "-year" => \'sysdate' } } } },
-       stmt => ' WHERE ( timestamp != (TRUNC (YEAR sysdate)) )',
+       where => { timestamp => { '!=' => { "-trunc" => { "-year" => SQL('sysdate') } } } },
+       stmt => ' WHERE ( timestamp != TRUNC YEAR sysdate )',
        bind => [],
    },
    {
        where => { timestamp => { '>=' => { "-to_date" => '2009-12-21 00:00:00' } } },
-       stmt => ' WHERE ( timestamp >= (TO_DATE ?) )',
+       stmt => ' WHERE ( timestamp >= TO_DATE ? )',
        bind => ['2009-12-21 00:00:00'],
    },
    {
@@ -338,50 +330,61 @@ my @tests = (
    },
     {
         where => { "-not" => { a => 1 } },
-        stmt  => " WHERE ( (NOT a = ?) )",
+        stmt  => " WHERE ( NOT a = ? )",
         bind => [ 1 ],
     },
     {
         where => { a => 1, "-not" => { b => 2 } },
-        stmt  => ' WHERE ( ( ( (NOT b = ?) ) AND ( a = ? ) ) )',
+        stmt  => ' WHERE ( ( ( NOT b = ? ) AND ( a = ? ) ) )',
         bind => [ 2, 1 ],
     },
     {
         where => { "-not" => { a => 1, b => 2, c => 3 } },
-        stmt  => " WHERE ( (NOT ( ( a = ? ) AND ( b = ? ) AND ( c = ? ) )) )",
+        stmt  => " WHERE ( NOT ( ( a = ? ) AND ( b = ? ) AND ( c = ? ) ) )",
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => [ a => 1, b => 2, c => 3 ] },
-        stmt  => ' WHERE ( (NOT ( ( a = ? ) OR ( b = ? ) OR ( c = ? ) )) )',
+        stmt  => ' WHERE ( NOT ( ( a = ? ) OR ( b = ? ) OR ( c = ? ) ) )',
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => { c => 3, "-not" => { b => 2, "-not" => { a => 1 } } } },
-        stmt  => ' WHERE ( (NOT ( ( (NOT ( ( (NOT a = ?) ) AND ( b = ? ) )) ) AND ( c = ? ) )) )',
+        stmt  => ' WHERE ( NOT ( ( NOT ( ( NOT a = ? ) AND ( b = ? ) ) ) AND ( c = ? ) ) )',
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => { "-bool" => 'c', "-not" => { "-not_bool" => 'b', "-not" => { a => 1 } } } },
-        stmt  => " WHERE ( (NOT ( ( c ) AND ( (NOT ( ( (NOT a = ?) ) AND ( (NOT b) ) )) ) )) )",
+        stmt  => " WHERE ( NOT ( ( c ) AND ( NOT ( ( NOT a = ? ) AND ( NOT b ) ) ) ) )",
         bind => [ 1 ],
     },
 );
 
-my $s = Squirrel.new(:$debug);
+multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
 
-for @tests.pick(18) -> $test {
-    subtest {
-    	my @res;
-        lives-ok {
-    	    @res = ( $test<order> ?? $s.where($test<where>, $test<order>) !!  $s.where($test<where>) );
-        }, "get where";
-        is @res[0], $test<stmt>, "got the SQL expected";
-        is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
-    }, "where test " ~ $++;
+    my $range;
+    if $from.defined && $to.defined {
+        $range = $from .. $to;
+    }
+    else {
+        $range = $only // $from // $to // ^(@tests.elems);
+    }
+
+
+    my $s = Squirrel.new(:$debug);
+    for @tests[$range.list] -> $test  {
+        subtest {
+    	    my @res;
+            #lives-ok {
+    	        @res = ( $test<order> ?? $s.where($test<where>, $test<order>) !!  $s.where($test<where>) );
+            #}, "do where";
+            is @res[0], $test<stmt>, "got the SQL expected";
+            is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
+        }, "where test " ~ $++;
+    }
+
+    done-testing;
 }
-
-done-testing;
 
 
 
