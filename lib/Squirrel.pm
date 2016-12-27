@@ -497,11 +497,14 @@ class Squirrel {
             samewith();
         }
      
+        multi method new($where) {
+            samewith :$where;
+        }
         multi method new(*%where where { $_.keys ~~ none(<clause where>) }) {
              samewith :%where;
         }
      
-        multi method new(+@where, *% where { $_.keys.elems == 0 })  {
+        multi method new(*@where, *% where { $_.keys.elems == 0 })  {
             samewith :@where;
         }
 
