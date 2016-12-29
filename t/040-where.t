@@ -123,7 +123,7 @@ my @tests = (
            '>'  => 10,
           },
         },
-        stmt => 'WHERE id = ? AND num <= ? AND num > ?',
+        stmt => 'WHERE id = ? AND ( num <= ? AND num > ? )',
         bind => [1,20,10],
     },
 
@@ -187,7 +187,7 @@ my @tests = (
 
    {
        where => SQL('foo = ?','bar' ),
-       stmt => "WHERE ( foo = ? )",
+       stmt => "WHERE foo = ?",
        bind => [ "bar" ],
    },
 
