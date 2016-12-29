@@ -229,116 +229,116 @@ my @tests = (
 
    {
        where => { "-and" => ["-not_bool" => 'foo', "-not_bool" => 'bar'] },
-       stmt => 'WHERE ( ( ( NOT foo ) AND ( NOT bar ) ) )',
+       stmt => 'WHERE ( NOT foo AND NOT bar )',
        bind => [],
    },
 
    {
        where => { "-or" => ["-not_bool" => 'foo', "-not_bool" => 'bar'] },
-       stmt => 'WHERE ( ( ( NOT foo ) OR ( NOT bar ) ) )',
+       stmt => 'WHERE ( NOT foo OR NOT bar )',
        bind => [],
    },
 
    {
        where => { "-bool" => SQL('function(?)', 20)  },
-       stmt => "WHERE ( function(?) )",
+       stmt => "WHERE function(?)",
        bind => [20],
    },
 
    {
        where => { "-not_bool" => SQL('function(?)', 20)  },
-       stmt => 'WHERE ( NOT function(?) )',
+       stmt => 'WHERE NOT function(?)',
        bind => [20],
    },
 
    {
        where => { "-bool" => { a => 1, b => 2}  },
-       stmt => "WHERE ( ( ( a = ? ) AND ( b = ? ) ) )",
+       stmt => "WHERE a = ? AND b = ?",
        bind => [1, 2],
    },
 
    {
        where => { "-bool" => [ a => 1, b => 2] },
-       stmt => 'WHERE ( ( ( a = ? ) OR ( b = ? ) ) )',
+       stmt => 'WHERE a = ? OR b = ?',
        bind => [1, 2],
    },
 
    {
        where => { "-not_bool" => { a => 1, b => 2}  },
-       stmt => 'WHERE ( NOT ( ( a = ? ) AND ( b = ? ) ) )',
+       stmt => 'WHERE NOT ( a = ? AND b = ? )',
        bind => [1, 2],
    },
 
    {
        where => { "-not_bool" => [ a => 1, b => 2] },
-       stmt => 'WHERE ( NOT ( ( a = ? ) OR ( b = ? ) ) )',
+       stmt => 'WHERE NOT ( a = ? OR b = ? )',
        bind => [1, 2],
    },
 
    {
        where => { bool1 => { '=' => { "-not_bool" => 'bool2' } } },
-       stmt => "WHERE ( bool1 = NOT bool2 )",
+       stmt => "WHERE bool1 = NOT bool2",
        bind => [],
    },
    {
        where => { "-not_bool" => { "-not_bool" => { "-not_bool" => 'bool2' } } },
-       stmt => 'WHERE ( NOT NOT NOT bool2 )',
+       stmt => 'WHERE NOT ( NOT ( NOT bool2 ) )',
        bind => [],
    },
 
    {
        where => { timestamp => { '!=' => { "-trunc" => { "-year" => SQL('sysdate') } } } },
-       stmt => 'WHERE ( timestamp != TRUNC YEAR sysdate )',
+       stmt => 'WHERE timestamp != TRUNC YEAR sysdate',
        bind => [],
    },
    {
        where => { timestamp => { '>=' => { "-to_date" => '2009-12-21 00:00:00' } } },
-       stmt => 'WHERE ( timestamp >= TO_DATE ? )',
+       stmt => 'WHERE timestamp >= TO_DATE ?',
        bind => ['2009-12-21 00:00:00'],
    },
    {
        where => { ip => {'<<=' => '127.0.0.1/32' } },
-       stmt => "WHERE ( ip <<= ? )",
+       stmt => "WHERE ip <<= ?",
        bind => ['127.0.0.1/32'],
    },
    {
        where => { foo => { 'GLOB' => '*str*' } },
-       stmt => "WHERE ( foo GLOB ? )",
+       stmt => "WHERE foo GLOB ?",
        bind => [ '*str*' ],
    },
    {
        where => { foo => { 'REGEXP' => 'bar|baz' } },
-       stmt => "WHERE ( foo REGEXP ? )",
+       stmt => "WHERE foo REGEXP ?",
        bind => [ 'bar|baz' ],
    },
     {
         where => { "-not" => { a => 1 } },
-        stmt  => "WHERE ( NOT a = ? )",
+        stmt  => "WHERE NOT a = ?",
         bind => [ 1 ],
     },
     {
         where => { a => 1, "-not" => { b => 2 } },
-        stmt  => 'WHERE ( ( ( NOT b = ? ) AND ( a = ? ) ) )',
+        stmt  => 'WHERE NOT b = ? AND a = ?',
         bind => [ 2, 1 ],
     },
     {
         where => { "-not" => { a => 1, b => 2, c => 3 } },
-        stmt  => "WHERE ( NOT ( ( a = ? ) AND ( b = ? ) AND ( c = ? ) ) )",
+        stmt  => "WHERE NOT ( a = ? AND b = ? AND c = ? )",
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => [ a => 1, b => 2, c => 3 ] },
-        stmt  => 'WHERE ( NOT ( ( a = ? ) OR ( b = ? ) OR ( c = ? ) ) )',
+        stmt  => 'WHERE NOT ( a = ? OR b = ? OR c = ? )',
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => { c => 3, "-not" => { b => 2, "-not" => { a => 1 } } } },
-        stmt  => 'WHERE ( NOT ( ( NOT ( ( NOT a = ? ) AND ( b = ? ) ) ) AND ( c = ? ) ) )',
+        stmt  => 'WHERE NOT ( NOT ( NOT ( a = ? ) AND b = ? ) AND c = ? )',
         bind => [ 1, 2, 3 ],
     },
     {
         where => { "-not" => { "-bool" => 'c', "-not" => { "-not_bool" => 'b', "-not" => { a => 1 } } } },
-        stmt  => "WHERE ( NOT ( ( c ) AND ( NOT ( ( NOT a = ? ) AND ( NOT b ) ) ) ) )",
+        stmt  => "WHERE NOT ( c AND NOT ( NOT ( a = ? ) AND NOT b ) )",
         bind => [ 1 ],
     },
 );
