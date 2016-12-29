@@ -617,13 +617,15 @@ class Squirrel {
          role LiteralPair does SqlLiteral {
          }
      
-         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, Str :$value), Logic :$logic) returns Clause {
+=begin comment
+         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, Str :$value)) returns Clause {
              my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
              self.debug("Pair not Literal but Key is $key (String value $value)");
              self.where-unary-op($op, $value);
          }
+=end comment
      
-         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value), Logic :$logic) returns Clause {
+         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value)) returns Clause {
              my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
              self.debug("Pair not Literal but Key is $key (op is $op)");
              self.where-unary-op($op, $value);
@@ -691,13 +693,13 @@ class Squirrel {
          }
      
      
-         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems > 1 }, Logic :$logic) returns Clause {
+         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems > 1 }) returns Clause {
              self.debug("SqlLiteral with more bind");
              my ($sql, $bind) = @value;
              Expression.new(sql => $sql, bind => $bind.flat);
          }
      
-         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems == 1 }, Logic :$logic)  returns Clause {
+         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems == 1 })  returns Clause {
              self.debug("SqlLiteral with no bind");
              my ($sql) = @value;
              Expression.new( sql => $sql);
@@ -801,7 +803,7 @@ class Squirrel {
             Expression.new(:$sql, :@bind);
         }
 
-        multi method where-unary-op(Str:D $op, $rhs where { $_ !~~ Stringy|Numeric }) returns Clause {
+        multi method where-unary-op(Str:D $op, $rhs) returns Clause {
             self.debug("with $op and { $rhs.perl }");
             my $clause = self.build-where($rhs);
             Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql), bind => $clause.bind);
