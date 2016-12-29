@@ -175,13 +175,13 @@ my @tests = (
             ],
           ],
         },
-        stmt => 'WHERE user = ? AND ( ( workhrs > ? AND geo = ? ) AND ( geo = ? OR workhrs < ? ) )',
+        stmt => 'WHERE ( user = ? AND ( ( workhrs > ? AND geo = ? ) AND ( geo = ? OR workhrs < ? ) ) )',
         bind => ["nwiger", 20,  "ASIA",  "EURO", 50],
     },
 
    {
        where => { "-and" => [{}, { 'me.id' => 1}] },
-       stmt => "WHERE ( me.id = ? )",
+       stmt => "WHERE ( ( me.id = ? ) )",
        bind => [ 1 ],
    },
 
@@ -277,7 +277,7 @@ my @tests = (
 
    {
        where => { bool1 => { '=' => { "-not_bool" => 'bool2' } } },
-       stmt => "WHERE bool1 = NOT bool2",
+       stmt => "WHERE bool1 = ( NOT bool2 )",
        bind => [],
    },
    {
@@ -288,12 +288,12 @@ my @tests = (
 
    {
        where => { timestamp => { '!=' => { "-trunc" => { "-year" => SQL('sysdate') } } } },
-       stmt => 'WHERE timestamp != TRUNC YEAR sysdate',
+       stmt => 'WHERE timestamp != ( TRUNC ( YEAR sysdate ) )',
        bind => [],
    },
    {
        where => { timestamp => { '>=' => { "-to_date" => '2009-12-21 00:00:00' } } },
-       stmt => 'WHERE timestamp >= TO_DATE ?',
+       stmt => 'WHERE timestamp >= ( TO_DATE ? )',
        bind => ['2009-12-21 00:00:00'],
    },
    {
@@ -313,12 +313,12 @@ my @tests = (
    },
     {
         where => { "-not" => { a => 1 } },
-        stmt  => "WHERE NOT a = ?",
+        stmt  => "WHERE NOT ( a = ? )",
         bind => [ 1 ],
     },
     {
         where => { a => 1, "-not" => { b => 2 } },
-        stmt  => 'WHERE NOT b = ? AND a = ?',
+        stmt  => 'WHERE NOT ( b = ? ) AND a = ?',
         bind => [ 2, 1 ],
     },
     {
