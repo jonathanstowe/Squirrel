@@ -199,31 +199,31 @@ my @tests = (
 
    {
        where => { "-bool" => 'foo' },
-       stmt => "WHERE ( foo )",
+       stmt => "WHERE foo",
        bind => [],
    },
 
    {
        where => { "-and" => ["-bool" => 'foo', "-bool" => 'bar'] },
-       stmt => 'WHERE ( ( ( foo ) AND ( bar ) ) )',
+       stmt => 'WHERE ( foo AND bar )',
        bind => [],
    },
 
    {
        where => { "-or" => ["-bool" => 'foo', "-bool" => 'bar'] },
-       stmt => 'WHERE ( ( ( foo ) OR ( bar ) ) )',
+       stmt => 'WHERE ( foo OR bar )',
        bind => [],
    },
 
    {
        where => { "-not_bool" => SQL('function(x)') },
-       stmt => 'WHERE ( NOT function(x) )',
+       stmt => 'WHERE NOT function(x)',
        bind => [],
    },
 
    {
        where => { "-not_bool" => 'foo' },
-       stmt => 'WHERE ( NOT foo )',
+       stmt => 'WHERE NOT foo',
        bind => [],
    },
 
