@@ -663,6 +663,12 @@ class Squirrel {
              Expression.new(sql => self.quote($key) ~ self.sqlcase(" is null"));
          }
      
+        multi method build-where(Pair $p ( :$key where /^'-'/, SqlLiteral :$value) ) returns Clause {
+             self.debug("got pair  with SqlLiteral value { $p.perl } but op key");
+             my $clause = self.where-unary-op($key, $value[0]);
+             $clause.bind.append($value[1..*]) if $value.elems > 1;
+             $clause;
+        }
      
          multi method build-where(Pair $p ( :$key, SqlLiteral :$value ) ) returns Clause {
              self.debug("got pair  with SqlLiteral value { $p.perl }");
@@ -784,6 +790,10 @@ class Squirrel {
              }
          }
      
+        multi method where-unary-op(Str $op where /^'-'/, $rhs) returns Clause {
+            self.debug("got op $op - trimming");
+            samewith $op.substr(1), $rhs;
+        }
         multi method where-unary-op(Str $op, $rhs where Stringy|Numeric) returns Clause {
             self.assert-pass-injection-guard($op);
             my $sql = sprintf "%s %s", self.sqlcase($op), self.convert('?');
@@ -791,7 +801,8 @@ class Squirrel {
             Expression.new(:$sql, :@bind);
         }
 
-        multi method where-unary-op(Str $op, $rhs where { $_ !~~ Stringy|Numeric }) returns Clause {
+        multi method where-unary-op(Str:D $op, $rhs where { $_ !~~ Stringy|Numeric }) returns Clause {
+            self.debug("with $op and { $rhs.perl }");
             my $clause = self.build-where($rhs);
             Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql), bind => $clause.bind);
         }
