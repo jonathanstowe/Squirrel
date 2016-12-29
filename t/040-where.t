@@ -143,7 +143,7 @@ my @tests = (
         where => {
             bar => {'!=' => []},
         },
-        stmt => "WHERE ( 1=1 )",
+        stmt => "WHERE 1=1",
         bind => [],
     },
 
