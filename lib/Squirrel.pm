@@ -236,10 +236,10 @@ class Squirrel {
         }
 
 
-        method sql(Bool :$outer) returns Str {
+        method sql(Bool :$outer, Bool :$inner = $!inner) returns Str {
             my $join = " " ~ self.sqlcase($!logic) ~ " ";
             my $sql = @!clauses.map(-> $v { $v.sql } ).join($join);
-            (!$outer && $!inner) ?? "( $sql )" !! $sql;
+            (!$outer && $inner) ?? "( $sql )" !! $sql;
         }
     }
 
@@ -557,7 +557,7 @@ class Squirrel {
              samewith @where, :$logic;
          }
      
-         multi method build-where(@where, Logic :$logic = $!logic, Bool :$inner) returns Clause {
+         multi method build-where(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
              my @clauses = @where;
              self.debug("(Array) got clauses { @where.perl } with $logic");
      
@@ -600,6 +600,11 @@ class Squirrel {
              [$where, () ];
          }
      
+        # Awful
+        multi method build-where($where) {
+            self.debug("Fallback with { $where.perl }");
+            samewith $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
+        }
         multi method build-where(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
      
             my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner);
@@ -810,7 +815,7 @@ class Squirrel {
         multi method where-unary-op(FallbackOp $op, $rhs) returns Clause {
             self.debug("with $op and { $rhs.perl }");
             my $clause = self.build-where($rhs);
-            Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql), bind => $clause.bind);
+            Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql(:inner)), bind => $clause.bind);
         }
      
      
@@ -851,7 +856,7 @@ class Squirrel {
      
          multi method where-unary-op(Str:D $op where m:i/^ ( not \s ) bool     $/, $value) returns Clause {
              my $clause = samewith 'bool', $value;
-             Expression.new(sql => "NOT " ~ $clause.sql, bind => $clause.bind);
+             Expression.new(sql => "NOT " ~ $clause.sql(:inner), bind => $clause.bind);
          }
      
         # Equality expression
