@@ -792,18 +792,22 @@ class Squirrel {
              }
          }
      
+        subset FallbackOp of Str:D where { $_ !~~ m:i/(bool|and|or|ident|nest|value)/ };
+
         multi method where-unary-op(Str $op where /^'-'/, $rhs) returns Clause {
             self.debug("got op $op - trimming");
             samewith $op.substr(1), $rhs;
         }
-        multi method where-unary-op(Str $op, $rhs where Stringy|Numeric) returns Clause {
+
+        multi method where-unary-op(FallbackOp $op, $rhs where Stringy|Numeric) returns Clause {
+            self.debug("got $op and $rhs");
             self.assert-pass-injection-guard($op);
             my $sql = sprintf "%s %s", self.sqlcase($op), self.convert('?');
             my @bind = self.apply-bindtype($*NESTED-FUNC-LHS // $op, $rhs);
             Expression.new(:$sql, :@bind);
         }
 
-        multi method where-unary-op(Str:D $op, $rhs) returns Clause {
+        multi method where-unary-op(FallbackOp $op, $rhs) returns Clause {
             self.debug("with $op and { $rhs.perl }");
             my $clause = self.build-where($rhs);
             Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql), bind => $clause.bind);
