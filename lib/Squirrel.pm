@@ -121,7 +121,7 @@ class Squirrel {
         }
 
         multi method quote(Whatever $) {
-            samewith '*';
+            self.quote: '*';
         }
 
         multi method quote('*') {
@@ -144,7 +144,7 @@ class Squirrel {
         }
 
         multi method parenthesise(Str $key, Clause $sql) returns Str {
-            samewith $key, $sql.sql;
+            self.parenthesise: $key, $sql.sql;
         }
 
         method apply-bindtype(Str $column, $values) {
@@ -516,7 +516,7 @@ class Squirrel {
 
         multi method new(Any:U $) {
             self.debug("no where");
-            samewith();
+            self.bless();
         }
      
         multi method new($where) {
@@ -550,11 +550,11 @@ class Squirrel {
      
      
          multi method build-where(@where, Any:U $logic?) returns Clause {
-             samewith @where, :$!logic;
+             self.build-where: @where, :$!logic;
          }
      
          multi method build-where(@where, Logic $logic) returns Clause {
-             samewith @where, :$logic;
+             self.build-where: @where, :$logic;
          }
      
          multi method build-where(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
@@ -593,7 +593,7 @@ class Squirrel {
      
          multi method build-where(Logic :$logic, *%where) {
              self.debug("slurpy hash");
-             samewith %where, :$logic;
+             self.build-where: %where, :$logic;
          }
      
          multi method build-where($where, Logic :$logic) {
@@ -603,7 +603,7 @@ class Squirrel {
         # Awful
         multi method build-where($where) {
             self.debug("Fallback with { $where.perl }");
-            samewith $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
+            self.build-where: $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
         }
         multi method build-where(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
      
@@ -648,7 +648,7 @@ class Squirrel {
          multi method build-where(Pair $p where * !~~ LiteralPair ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 )) returns Clause {
              my $new-logic = $key.substr(1).lc;
              self.debug("got a pair with an/or op will redispatch with logic $new-logic");
-             samewith @value, logic => $new-logic;
+             self.build-where: @value, logic => $new-logic;
          }
      
      
@@ -679,7 +679,7 @@ class Squirrel {
      
          multi method build-where(Pair $p ( :$key, SqlLiteral :$value ) ) returns Clause {
              self.debug("got pair  with SqlLiteral value { $p.perl }");
-             samewith $p but LiteralPair;
+             self.build-where: $p but LiteralPair;
          }
      
          multi method build-where(LiteralPair $p (:$key, :@value where *.elems > 1)) returns Clause {
@@ -801,7 +801,7 @@ class Squirrel {
 
         multi method where-unary-op(Str $op where /^'-'/, $rhs) returns Clause {
             self.debug("got op $op - trimming");
-            samewith $op.substr(1), $rhs;
+            self.where-unary-op: $op.substr(1), $rhs;
         }
 
         multi method where-unary-op(FallbackOp $op, $rhs where Stringy|Numeric) returns Clause {
@@ -855,7 +855,7 @@ class Squirrel {
          }
      
          multi method where-unary-op(Str:D $op where m:i/^ ( not \s ) bool     $/, $value) returns Clause {
-             my $clause = samewith 'bool', $value;
+             my $clause = self.where-unary-op: 'bool', $value;
              Expression.new(sql => "NOT " ~ $clause.sql(:inner), bind => $clause.bind);
          }
      
@@ -969,7 +969,7 @@ class Squirrel {
          }
      
          multi method where-special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) returns Clause {
-             samewith $key, $op, @values;
+             self.where-special-op: $key, $op, @values;
          }
      
         class In does Clause {
