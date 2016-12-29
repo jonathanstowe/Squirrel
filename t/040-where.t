@@ -193,7 +193,7 @@ my @tests = (
 
    {
        where => { "-bool" => SQL('function(x)') },
-       stmt => 'WHERE ( function(x) )',
+       stmt => 'WHERE function(x)',
        bind => [],
    },
 
