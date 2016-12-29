@@ -572,6 +572,7 @@ class Squirrel {
                      }
                      when Associative|Pair {
                          self.debug("pair clause { $el.perl }");
+                         next unless $el.keys.elems; # Skip empty
                          self.build-where($el, logic => 'and', :inner);
                      }
                      when Str {
