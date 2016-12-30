@@ -11,7 +11,7 @@ my $where;
 my $*SQUIRREL-DEBUG = True;
 
 lives-ok {
-    $where = Squirrel::Where.new(a => 1, b => 2);
+    $where = Squirrel::Where.new( where => { a => 1, b => 2 }, logic => 'AND');
 }
 
 isa-ok $where, Squirrel::Where, "It's the right class";
@@ -20,13 +20,12 @@ is-deeply $where.bind, [1,2], "and the bind is what we expected";
 diag $where.sql.perl;
 
 lives-ok {
-    $where = Squirrel::Where.new('-or' => (a => 1, b => 2));
+    $where = Squirrel::Where.new(where => ('-or' => (a => 1, b => 2)));
 }
 
 isa-ok $where, Squirrel::Where, "It's the right class";
 is $where.sql, "WHERE a = ? OR b = ?", "got plausible SQL";
 is-deeply $where.bind, [1,2], "and the bind is what we expected";
-diag $where.sql.perl;
 
 
 done-testing;
