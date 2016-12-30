@@ -30,6 +30,8 @@ my ($sql, @bind) = $s.select('foo', *, where => bar => 3); # "select * from foo 
 
 class Squirrel {
 
+    role FallbackRHS { }
+
     role LiteralValue { }
 
     role SqlLiteral does LiteralValue {
@@ -63,6 +65,16 @@ class Squirrel {
 
     subset Logic of Str where { $_.defined && $_.uc ~~ "OR"|"AND" };
 
+    has Bool  $.array-datatypes;
+    has Str   $.case where 'lower'|'upper' = 'upper';
+    has Logic $.logic = 'AND';
+    has Str   $.bindtype = 'normal';
+    has Str   $.cmp = '=';
+
+    method config() {
+        { :$!array-datatypes, :$!case, :$!logic, :$!bindtype, :$!cmp }
+    }
+
     role Clause {
         has Bool $.debug = False;
 
@@ -74,7 +86,7 @@ class Squirrel {
         has $.convert;
         has $.array-datatypes;
         has Str $.case where 'lower'|'upper' = 'upper';
-        has Logic $.logic = 'OR';
+        has Logic $.logic = 'AND';
         has Str $.bindtype = 'normal';
         has Str $.cmp = '=';
 
@@ -90,9 +102,9 @@ class Squirrel {
 
         has Regex $.injection-guard = rx:i/ \; | ^ \s* go \s /;
 
-        submethod TWEAK() {
+        multi submethod TWEAK() {
             $!case     //= 'upper';
-            $!logic    //= 'OR';
+            $!logic    //= 'AND';
             $!bindtype //= 'normal';
             $!cmp      //= '=';
             $!injection-guard //= rx:i/ \; | ^ \s* go \s /;
@@ -138,7 +150,12 @@ class Squirrel {
             }
         }
 
-        multi method parenthesise(Str $key, Str $sql ) returns Str {
+        proto method parenthesise(|c) { * }
+        # Almost certainly didn't get a whole expression
+        multi method parenthesise(Str $key, FallbackRHS $sql) returns Str {
+            $sql;
+        }
+        multi method parenthesise(Str $key, Str $sql where * !~~ FallbackRHS) returns Str {
             self.debug("got nested func { $*NESTED-FUNC-LHS // '<none>' } and LHS $key - clause $sql");
             $*NESTED-FUNC-LHS && ($*NESTED-FUNC-LHS eq $key) ?? $sql !! "( $sql )";
         }
@@ -508,7 +525,7 @@ class Squirrel {
 
     class Where does Statement {
         has Clause $.clause;
-        has $!where;
+        has $.where;
 
         method sql() returns Str {
             $!sql //= self.sqlcase('WHERE') ~ " " ~ self.clause.sql(:outer);
@@ -519,31 +536,9 @@ class Squirrel {
             self.bless();
         }
      
-        multi method new($where) {
-            self.bless(:$where);
-        }
-        multi method new(*%where where { $_.keys !~~ any(<clause where logic>) }) {
-            self.bless(:%where, logic => 'and');
-        }
-
-        multi method new(%where) {
-            self.bless(:%where, logic => 'and');
-        }
-     
-        multi method new(*@where where *.elems > 1 , *% where { $_.keys.elems == 0 })  {
-            self.bless(:@where, logic => 'or');
-        }
-
-        multi submethod BUILD(Clause :$!clause!) {
-            self.debug("where with clause");
-        }
-
-        multi submethod BUILD(:$!where!, :$!logic = 'OR') {
-            self.debug("where { $!where.perl } ( { $!where.^name } )");
-        }
 
         method clause() returns Clause handles <bind> {
-            $!clause //= self.build-where($!where, :$!logic);
+            $!clause //= self.build-where($!where);
         }
      
         proto method build-where(|c) { * }
@@ -561,7 +556,7 @@ class Squirrel {
              my @clauses = @where;
              self.debug("(Array) got clauses { @where.perl } with $logic");
      
-             my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner);
+             my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner, :$!case);
              while @clauses.elems {
                  my $el = @clauses.shift;
      
@@ -609,7 +604,7 @@ class Squirrel {
 
         multi method build-where(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
      
-            my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner);
+            my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner, :$!case);
             self.debug("hash -> { %where.perl } with $logic ");
      
             my Bool $inner-inner = $inner || %where.pairs.elems > 1;
@@ -624,22 +619,12 @@ class Squirrel {
          role LiteralPair does SqlLiteral {
          }
      
-=begin comment
-         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, Str :$value)) returns Clause {
-             my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
-             self.debug("Pair not Literal but Key is $key (String value $value)");
-             self.where-unary-op($op, $value);
-         }
-=end comment
-     
          multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value)) returns Clause {
              my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
              self.debug("Pair not Literal but Key is $key (op is $op)");
              self.where-unary-op($op, $value);
          }
 
-
-     
          multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric )) returns Clause {
              self.debug("Pair with Stringy|Numeric value");
             # TODO: Equality expression
@@ -787,7 +772,7 @@ class Squirrel {
              self.debug("Got a pair with a hash value");
              my $*NESTED-FUNC-LHS = $*NESTED-FUNC-LHS // $key;
      
-            my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner);
+            my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner, :$!case);
 
              for %value.pairs.sort(*.key) -> $pair (:key($orig-op), :value($val)) {
                  self.debug("pair { $orig-op => $val.perl }");
@@ -822,6 +807,7 @@ class Squirrel {
             self.debug("got $op and $rhs");
             self.assert-pass-injection-guard($op);
             my $sql = sprintf "%s %s", self.sqlcase($op), self.convert('?');
+            $sql does FallbackRHS;
             my @bind = self.apply-bindtype($*NESTED-FUNC-LHS // $op, $rhs);
             Expression.new(:$sql, :@bind);
         }
@@ -855,7 +841,7 @@ class Squirrel {
          }
          
          multi method where-unary-op(Str $op where /:i^ nest ( [_\s]? \d+ )? $/, $value) returns Clause {
-             self.build-where($value);
+             self.build-where($value, :inner);
          }
      
          multi method where-unary-op(Str:D $op where /:i^  bool   $/, Str:D $value) returns Clause {
@@ -908,7 +894,7 @@ class Squirrel {
                  $logic = $/<logic>.Str.uc;
                  @values.shift;
              }
-             ExpressionGroup.new(clauses =>self.build-where(@values.map( -> $v { $key => $op =>  $v }), $logic), :$logic, :$inner);
+             ExpressionGroup.new(clauses =>self.build-where(@values.map( -> $v { $key => $op =>  $v }), $logic), :$logic, :$inner, :$!case);
          }
      
          multi method where-field-op(Str $key, Str:D $op where $!equality-op, @values where *.elems == 0, Bool :$inner) returns Clause {
@@ -1069,9 +1055,16 @@ class Squirrel {
 
     class OrderBy does Statement {
         has @.fields;
-        method order-by($arg) {
+
+        has $.order;
+
+        method sql() returns Str {
+            $!sql //= self.order-by;
+        }
+
+        method order-by() {
             my (@sql, @bind);
-            for self.order-by-chunks($arg) -> $c {
+            for self.order-by-chunks($!order) -> $c {
                 given $c {
                     when Str {
                         @sql.append: $c;
@@ -1082,8 +1075,7 @@ class Squirrel {
                     }
                 }
             }
-            my $sql = @sql ?? sprintf '%s %s', self.sqlcase(' order by'), @sql.join(', ') !! '';
-            ($sql, @bind)
+            @sql ?? sprintf '%s %s', self.sqlcase('order by'), @sql.join(', ') !! '';
         }
 
         proto method order-by-chunks(|c) { * }
@@ -1101,12 +1093,12 @@ class Squirrel {
 
 
         class X::InvalidDirection is Exception {
-            has Str $.message = 'key passed to order-by must be "-desc" or "-asc"';
+            has Str $.message = 'key passed to order-by must be "desc" or "asc"';
         }
 
         multi method order-by-chunks(Pair $arg) {
             my @ret;
-            if $arg.key ~~ /^\-$<direction>=(desc|asc)/ {
+            if $arg.key ~~ /^\-?$<direction>=(desc|asc)/ {
                 for self.order-by-chunks($arg.value) -> $c {
                     my ($sql, @bind);
                     given $c {
@@ -1134,7 +1126,7 @@ class Squirrel {
 
     class Select does Statement {
         has $.from;
-        has @.fields;
+        has $.fields;
         has Where $.where;
         has OrderBy $.order-by;
         has Join @.join;
@@ -1154,7 +1146,7 @@ class Squirrel {
         }
 
         method fields() {
-            @!fields.map(-> $v { self.quote($v) });
+            $!fields.map(-> $v { self.quote($v) });
         }
 
         method bind() {
@@ -1164,6 +1156,7 @@ class Squirrel {
         method sql() returns Str {
             my $sql = (self.sqlcase('select'), self.fields.join(', '),  self.sqlcase('from'), self.from).join(' ');
             $sql ~= ' ' ~ self.where.sql if self.where;
+            $sql ~= ' ' ~ self.order-by.sql if self.order-by;
             $sql;
         }
 
@@ -1171,22 +1164,15 @@ class Squirrel {
 
     proto method select(|c) { * }
 
-    multi method select($table, *@fields,  :$where!, :$order, :$join) returns Select {
+    multi method select($table, *@fields,  :$where, :$order, :$join) returns Select {
         self.select($table, @fields, :$where, :$order, :$join);
     }
 
-
-    multi method select($from, *@fields) returns Select {
-        self.select($from, @fields);
-    }
-
-    multi method select($from, @fields) returns Select {
-        Select.new(:$from, :@fields);
-    }
-
-    multi method select($table, @fields, :$where!, :$order, :$join) returns Select {
-        my Where $where-clause = Where.new(:$where);
-        Select.new(from => $table, :@fields, where => $where-clause);
+    multi method select($table, @fields, :$where, :$order, :$join) returns Select {
+        my %args = from => $table, fields => @fields;
+        %args<where> = Where.new(:$where, |self.config) if $where;
+        %args<order-by> = OrderBy.new(:$order, |self.config) if $order;
+        Select.new(|%args, |self.config);
     }
 
     method delete($table, :$where) {
