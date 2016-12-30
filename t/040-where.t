@@ -371,7 +371,7 @@ multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
         subtest {
     	    my @res;
             #lives-ok {
-    	        @res = $s.where($test<where>) ;
+    	        @res = $s.where(where => $test<where>) ;
             #}, "do where";
             is @res[0], $test<stmt>, "got the SQL expected";
             is-deeply @res[1].Array, $test<bind>.Array, "got the expected bind";
