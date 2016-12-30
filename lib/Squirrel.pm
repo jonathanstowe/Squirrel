@@ -546,18 +546,18 @@ class Squirrel {
             $!clause //= self.build-where($!where, :$!logic);
         }
      
-         proto method build-where(|c) { * }
+        proto method build-where(|c) { * }
      
      
-         multi method build-where(@where, Any:U $logic?) returns Clause {
-             self.build-where: @where, :$!logic;
-         }
+        multi method build-where(@where, Any:U $logic?) returns Clause {
+            self.build-where: @where, :$!logic;
+        }
      
-         multi method build-where(@where, Logic $logic) returns Clause {
-             self.build-where: @where, :$logic;
-         }
+        multi method build-where(@where, Logic $logic) returns Clause {
+            self.build-where: @where, :$logic;
+        }
      
-         multi method build-where(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
+        multi method build-where(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
              my @clauses = @where;
              self.debug("(Array) got clauses { @where.perl } with $logic");
      
@@ -588,7 +588,7 @@ class Squirrel {
                  $clauses.clauses.append: $sub-clause;
              }
              $clauses;
-         }
+        }
      
      
          multi method build-where(Logic :$logic, *%where) {
@@ -597,7 +597,8 @@ class Squirrel {
          }
      
          multi method build-where($where, Logic :$logic) {
-             [$where, () ];
+             self.debug("Dumb with { $where.perl }");
+             Expression.new(sql => $where);
          }
      
         # Awful
@@ -605,6 +606,7 @@ class Squirrel {
             self.debug("Fallback with { $where.perl }");
             self.build-where: $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
         }
+
         multi method build-where(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
      
             my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner);
@@ -711,6 +713,17 @@ class Squirrel {
          }
      
      
+        multi method build-where(Pair $p ( Str :$key, Clause :$value ), Logic :$logic, Bool :$inner ) returns Clause {
+            my $sql = sprintf "%s %s", $key, $value.sql;
+            Expression.new(:$sql, bind => $value.bind);
+        }
+
+         multi method build-where(Pair $p ( :$key, Pair :$value (:key($orig-op), SqlLiteral :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
+             self.debug("Pair with SqlLiteral pair value");
+             my $inner-clause = self.build-where($value, :$logic, :$inner);
+             self.build-where($key => $inner-clause, :$logic, :$inner);
+         }
+
          
          multi method build-where(Pair $p ( :$key, Pair :$value (:key($orig-op), :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
              self.debug("Pair with pair value : { $p.perl }");
@@ -726,13 +739,14 @@ class Squirrel {
                  $sub-clause = self.build-where($key => $val, logic => ~$/<logic>);
              }
              elsif self.use-special-op($key, $op, $val) {
-                 self.debug("use-special-up said yes to $key $op $val");
+                 self.debug("use-special-up said yes to $key $op");
                  $sub-clause = self.where-special-op($key, $op, $val);
              }
              else {
                  # TODO : vigourous refactoring
                  given $val {
                      when Positional {
+                         self.debug("Positional { $val.perl } trying where-field-op");
                          $sub-clause = self.where-field-op($key, $op, $val, :$inner);
                      }
                      when Any:U {
@@ -1034,6 +1048,17 @@ class Squirrel {
              $sql = self.open-outer-paren($sql);
              Expression.new(sql => "$label $op ( $sql )", :@bind);
          }
+
+        method open-outer-paren(Str $sql is copy) {
+            self.debug("got $sql");
+            while $sql ~~ /^ \s* \( $<inner>=(.*) \) \s* $/ -> $inner {
+                if ~$inner<inner> ~~ /\)/ {
+                    # do something clever with extract_bracketed
+                }
+                $sql = ~$inner<inner>
+            }
+            $sql;
+        }
     }
 
     # Transitional
@@ -1042,18 +1067,66 @@ class Squirrel {
         ($w.sql, $w.bind);
     }
 
-    method open-outer-paren(Str $sql is copy) {
-        self.debug("got $sql");
-        while $sql ~~ /^ \s* \( $<inner>=(.*) \) \s* $/ -> $inner {
-            if ~$inner<inner> ~~ /\)/ {
-                # do something clever with extract_bracketed
-            }
-            $sql = ~$inner<inner>
-        }
-        $sql;
-    }
-
     class OrderBy does Statement {
+        has @.fields;
+        method order-by($arg) {
+            my (@sql, @bind);
+            for self.order-by-chunks($arg) -> $c {
+                given $c {
+                    when Str {
+                        @sql.append: $c;
+                    }
+                    when Positional {
+                        @sql.append: $c.shift;
+                        @bind.append: $c.list;
+                    }
+                }
+            }
+            my $sql = @sql ?? sprintf '%s %s', self.sqlcase(' order by'), @sql.join(', ') !! '';
+            ($sql, @bind)
+        }
+
+        proto method order-by-chunks(|c) { * }
+
+        multi method order-by-chunks(@args) {
+            @args.map(-> $arg { self.order-by-chunks($arg) }).flat;
+        }
+
+        multi method order-by-chunks(Str $arg) {
+            ( self.quote($arg) );
+        }
+        multi method order-by-chunks(Any:U) {
+            Empty;
+        }
+
+
+        class X::InvalidDirection is Exception {
+            has Str $.message = 'key passed to order-by must be "-desc" or "-asc"';
+        }
+
+        multi method order-by-chunks(Pair $arg) {
+            my @ret;
+            if $arg.key ~~ /^\-$<direction>=(desc|asc)/ {
+                for self.order-by-chunks($arg.value) -> $c {
+                    my ($sql, @bind);
+                    given $c {
+                        when Str {
+                            $sql = $c;
+                        }
+                        when Positional {
+                            ($sql, @bind) = $c.list;
+                        }
+                    }
+                    $sql = $sql ~ ' ' ~ self.sqlcase(~$/<direction>);
+                    @ret.push: [ $sql, @bind];
+                }
+            }
+            else {
+                X::InvalidDirection.new.throw;
+            }
+
+            @ret;
+        }
     }
 
     class Join does Statement {
@@ -1066,21 +1139,54 @@ class Squirrel {
         has OrderBy $.order-by;
         has Join @.join;
 
+        proto method table(|c) { * }
+
+        multi method table(@tables) returns Str {
+            @tables.map(-> $name { self.quote($name) }).join(', ');
+        }
+
+        multi method table(Str $table) returns Str {
+            self.quote($table);
+        }
+
+        method from() {
+            self.table($!from);
+        }
+
+        method fields() {
+            @!fields.map(-> $v { self.quote($v) });
+        }
+
+        method bind() {
+            $!where.defined ?? $!where.bind !! ();
+        }
+
+        method sql() returns Str {
+            my $sql = (self.sqlcase('select'), self.fields.join(', '),  self.sqlcase('from'), self.from).join(' ');
+            $sql ~= ' ' ~ self.where.sql if self.where;
+            $sql;
+        }
+
     }
 
     proto method select(|c) { * }
 
-    multi method select($table, @fields,  :$where, :$order, :$join) returns Select {
-        my $f = @fields.map(-> $v { self.quote($v) }).join(', ');
-        samewith $table, $f, :$where, :$order, :$join;
+    multi method select($table, *@fields,  :$where!, :$order, :$join) returns Select {
+        self.select($table, @fields, :$where, :$order, :$join);
     }
 
 
-    multi method select($table, *@fields, :$where, :$order, :$join) returns Select {
-        my $table-name = self.table($table);
-        my Where $where-clause = self.where($where).flat;
-        my $sql = join(' ', self.sqlcase('select'), @fields, self.sqlcase('from'),   $table-name) ~ $where-clause.sql;
-        Select.new(from => $table-name, :@fields, where => $where-clause);
+    multi method select($from, *@fields) returns Select {
+        self.select($from, @fields);
+    }
+
+    multi method select($from, @fields) returns Select {
+        Select.new(:$from, :@fields);
+    }
+
+    multi method select($table, @fields, :$where!, :$order, :$join) returns Select {
+        my Where $where-clause = Where.new(:$where);
+        Select.new(from => $table, :@fields, where => $where-clause);
     }
 
     method delete($table, :$where) {
@@ -1090,76 +1196,6 @@ class Squirrel {
         my $sql = self.sqlcase('delete from') ~ " $table-name" ~ $where-sql;
 
         ($sql, @bind);
-    }
-
-    method order-by($arg) {
-        my (@sql, @bind);
-        for self.order-by-chunks($arg) -> $c {
-            given $c {
-                when Str {
-                    @sql.append: $c;
-                }
-                when Positional {
-                    @sql.append: $c.shift;
-                    @bind.append: $c.list;
-                }
-            }
-        }
-        my $sql = @sql ?? sprintf '%s %s', self.sqlcase(' order by'), @sql.join(', ') !! '';
-        ($sql, @bind)
-    }
-
-    proto method order-by-chunks(|c) { * }
-
-    multi method order-by-chunks(@args) {
-        @args.map(-> $arg { self.order-by-chunks($arg) }).flat;
-    }
-
-    multi method order-by-chunks(Str $arg) {
-        ( self.quote($arg) );
-    }
-    multi method order-by-chunks(Any:U) {
-        Empty;
-    }
-
-
-    class X::InvalidDirection is Exception {
-        has Str $.message = 'key passed to order-by must be "-desc" or "-asc"';
-    }
-
-    multi method order-by-chunks(Pair $arg) {
-        my @ret;
-        if $arg.key ~~ /^\-$<direction>=(desc|asc)/ {
-            for self.order-by-chunks($arg.value) -> $c {
-                my ($sql, @bind);
-                given $c {
-                    when Str {
-                        $sql = $c;
-                    }
-                    when Positional {
-                        ($sql, @bind) = $c.list;
-                    }
-                }
-                $sql = $sql ~ ' ' ~ self.sqlcase(~$/<direction>);
-                @ret.push: [ $sql, @bind];
-            }
-        }
-        else {
-            X::InvalidDirection.new.throw;
-        }
-
-        @ret;
-    }
-
-
-    proto method table(|c) { * }
-
-    multi method table(@tables) returns Str {
-        @tables.map(-> $name { self.quote($name) }).join(', ');
-    }
-
-    multi method table(Str $table) returns Str {
-        self.quote($table);
     }
 
 
