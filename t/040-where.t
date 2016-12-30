@@ -341,6 +341,11 @@ my @tests = (
         stmt  => "WHERE NOT ( c AND NOT ( NOT ( a = ? ) AND NOT b ) )",
         bind => [ 1 ],
     },
+    {
+        where   => { a => {'>' =>  SQL('1 + 1')}, b => 8 },
+        stmt    => 'WHERE a > 1 + 1 AND b = ?',
+        bind    =>  [ 8 ],
+    }
 );
 
 multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
