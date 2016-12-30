@@ -345,7 +345,13 @@ my @tests = (
         where   => { a => {'>' =>  SQL('1 + 1')}, b => 8 },
         stmt    => 'WHERE a > 1 + 1 AND b = ?',
         bind    =>  [ 8 ],
+    },
+    {
+        where   => { a =>  '!=' => 'boom' },
+        stmt    => 'WHERE a != ?',
+        bind    =>  ['boom' ],
     }
+
 );
 
 multi sub MAIN(Bool :$debug, Int :$from, Int :$to, Int :$only) {
