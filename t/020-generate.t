@@ -60,19 +60,19 @@ my @tests =
       {
               func   => 'update',
               args   => \('test', {a => 'boom'}, where => {a => Any}),
-              stmt   => 'UPDATE test SET a = ? WHERE ( a IS NULL )',
+              stmt   => 'UPDATE test SET a = ? WHERE a IS NULL',
               bind   => ('boom')
       },
       {
               func   => 'update',
               args   => \('test', {a => 'boom'}, where => { a => {'!=' => "bang" }} ),
-              stmt   => 'UPDATE test SET a = ? WHERE ( a != ? )',
+              stmt   => 'UPDATE test SET a = ? WHERE a != ?',
               bind   => ('boom', 'bang')
       },
       {
               func   => 'update',
               args   => \('test', {'a-funny-flavored-candy' => 'yummy', b => 'oops'}, where => { a42 => "bang" }),
-              stmt   => 'UPDATE test SET a-funny-flavored-candy = ?, b = ? WHERE ( a42 = ? )',
+              stmt   => 'UPDATE test SET a-funny-flavored-candy = ?, b = ? WHERE a42 = ?',
               bind   => ('yummy', 'oops', 'bang')
       },
       {
@@ -119,19 +119,19 @@ my @tests =
               func   => 'update',
               args   => ('test', {a => 1, b => 2, c => 3, d => 4, e => 5}),
               stmt   => 'UPDATE test SET a = ?, b = ?, c = ?, d = ?, e = ?',
-              bind   => (qw/1 2 3 4 5/),
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'update',
               args   => \('test', {a => 1, b => 2, c => 3, d => 4, e => 5}, where => {a => {'in' => (1..5)}}),
-              stmt   => 'UPDATE test SET a = ?, b = ?, c = ?, d = ?, e = ? WHERE ( a IN ( ?, ?, ?, ?, ? ) )',
-              bind   => (qw/1 2 3 4 5 1 2 3 4 5/),
+              stmt   => 'UPDATE test SET a = ?, b = ?, c = ?, d = ?, e = ? WHERE a IN ( ?, ?, ?, ?, ? )',
+              bind   => (1,2,3,4,5,1,2,3,4,5),
       },
       {
               func   => 'update',
               args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => { a => { between => (1,2), } }),
-              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
-              bind   => (<1 02/02/02 1 2>),
+              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( a BETWEEN ? AND ? )',
+              bind   => (1,"02/02/02", 1,2),
       },
       {
               func   => 'insert',
@@ -164,10 +164,8 @@ my @tests =
               new    => {bindtype => 'columns', cmp => 'like'},
               args   => \('testin.table2', {One => 22, Three => 44, FIVE => 66},
                                           where => {Beer => 'is', Yummy => '%YES%', IT => ('IS','REALLY','GOOD')}),
-              stmt   => 'UPDATE testin.table2 SET FIVE = ?, One = ?, Three = ? WHERE ( ( ( Beer LIKE ? ) AND ( ( ( IT LIKE ? ) OR ( IT LIKE ? ) OR ( IT LIKE ? ) ) ) AND ( Yummy LIKE ? ) ) )',
-                       ~ '( `Beer` LIKE ? AND ( ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) OR ( `IT` LIKE ? ) ) AND `Yummy` LIKE ? )',
-              bind   => (('FIVE' => 66), ('One' => 22), ('Three' => 44), ('Beer' => 'is'),
-                         ('IT' => 'IS'), ('IT' => 'REALLY'), ('IT' => 'GOOD'), ('Yummy' => '%YES%')),
+              stmt   => 'UPDATE testin.table2 SET FIVE = ?, One = ?, Three = ? WHERE Beer LIKE ? AND ( IT LIKE ? OR IT LIKE ? OR IT LIKE ? ) AND Yummy LIKE ?',
+              bind   => ('FIVE' => 66, 'One' => 22, 'Three' => 44, 'Beer' => 'is', 'IT' => 'IS', 'IT' => 'REALLY', 'IT' => 'GOOD', 'Yummy' => '%YES%'),
       },
       {
               func   => 'select',
@@ -190,7 +188,7 @@ my @tests =
                                            -nest => ( face => ( -or => {'=' => 'mr.happy'}, {'=' => Any} ) ) },
                         ),
 
-              stmt   => 'UPDATE taco_punches SET one = ?, three = ? WHERE ( ( ( ( ( face = ? ) OR ( face IS NULL ) ) ) AND ( ( ( bland != ? ) OR ( bland != ? ) ) ) AND ( ( ( tasty != ? ) OR ( tasty != ? ) ) ) ) )',
+              stmt   => 'UPDATE taco_punches SET one = ?, three = ? WHERE ( face = ? OR face IS NULL ) AND ( bland != ? OR bland != ? ) AND ( tasty != ? OR tasty != ? )',
               bind   => (2,4, 'mr.happy','yes', 'YES','yes','YES'),
       },
       {
@@ -205,12 +203,12 @@ my @tests =
       {
               func   => 'update',
               args   => \('fhole', {fpoles => 4}, where => (
-                          { race => (<-or black white asian>) },
-                          { -nest => { firsttime => (-or => {'=' => 'yes'}, Any) } },
-                          { -and => ( { firstname => {-not_like => 'candace'} }, { lastname => {-in => (<jugs canyon towers>) } } ) },
+                          { race => (<black white asian>) },
+                          { '-nest' => { firsttime => ('-or' => {'=' => 'yes'}, Any) } },
+                          { '-and' => ( { firstname => {'-not_like' => 'candace'} }, { lastname => {'-in' => (<jugs canyon towers>) } } ) },
                         ) ),
-              stmt   => 'UPDATE fhole SET fpoles = ? WHERE ( ( ( ( ( race = ? ) OR ( race = ? ) OR ( race = ? ) ) ) OR ( ( ( firsttime = ? ) OR ( firsttime IS NULL ) ) ) OR ( ( ( firstname NOT LIKE ? ) AND ( lastname IN ( ?, ?, ? ) ) ) ) ) )',
-              bind   => (<4 black white asian yes candace jugs canyon towers>)
+              stmt   => 'UPDATE fhole SET fpoles = ? WHERE ( ( race = ? OR race = ? OR race = ? ) ) OR ( ( firsttime = ? OR firsttime IS NULL ) ) OR ( ( ( firstname NOT LIKE ? ) AND ( lastname IN ( ?, ?, ? ) ) ) )',
+              bind   => (4, |<black white asian yes candace jugs canyon towers>)
       },
       {
               func   => 'insert',
@@ -226,28 +224,28 @@ my @tests =
       },
       {
               func   => 'insert',
-              new    => {array-datatypes => 1},
+              new    => { :array-datatypes},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
               bind   => (1, (1, 1, 2, 3, 5, 8)),
       },
       {
               func   => 'insert',
-              new    => {bindtype => 'columns', array-datatypes => 1},
+              new    => {bindtype => 'columns', :array-datatypes},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
               bind   => ((a => 1), (b => (1, 1, 2, 3, 5, 8))),
       },
       {
               func   => 'update',
-              new    => {array-datatypes => 1},
+              new    => { :array-datatypes },
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'UPDATE test SET a = ?, b = ?',
               bind   => (1, (1, 1, 2, 3, 5, 8)),
       },
       {
               func   => 'update',
-              new    => {bindtype => 'columns', array-datatypes => 1},
+              new    => {bindtype => 'columns', :array-datatypes },
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
               stmt   => 'UPDATE test SET a = ?, b = ?',
               bind   => ((a => 1), (b => (1, 1, 2, 3, 5, 8))),
@@ -273,8 +271,8 @@ my @tests =
       {
               func   => 'update',
               args   => \('test', {a => 1, b => SQL("42") }, where => {a => {'between' => (1,2)}}),
-              stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( ( a BETWEEN ? AND ? ) )',
-              bind   => (<1 1 2>),
+              stmt   => 'UPDATE test SET a = ?, b = 42 WHERE ( a BETWEEN ? AND ? )',
+              bind   => (1,1,2),
       },
       {
               func   => 'insert',
@@ -305,7 +303,7 @@ my @tests =
               func   => 'update',
               new    => {bindtype => 'columns'},
               args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}, where => {a => {'between' => (1,2)}}),
-              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( ( a BETWEEN ? AND ? ) )',
+              stmt   => 'UPDATE test SET a = ?, b = to_date(?, \'MM/DD/YY\') WHERE ( a BETWEEN ? AND ? )',
               bind   => ((a => 1), (dummy => '02/02/02'), (a => 1), (a => 2)),
       },
       {
@@ -326,8 +324,8 @@ my @tests =
               func   => 'update',
               new    => {bindtype => 'columns'},
               args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}, where => {a => { 'between' => (1,2)}}),
-              stmt  => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY') WHERE ( ( a BETWEEN ? AND ? ) )",
-              bind  => $[:a(1), "02/02/02", [:a(1), :a(2)]],
+              stmt  => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY') WHERE ( a BETWEEN ? AND ? )",
+              bind  => $[:a(1), "02/02/02", :a(1), :a(2)],
       },
       {
               func   => 'select',
@@ -347,7 +345,7 @@ my @tests =
               func   => 'update',
               new    => {bindtype => 'columns'},
               args   => \('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02')), c => { '-lower' => 'foo' }}, where => {a => {'between' => (1,2)}}),
-              stmt   => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY'), c = LOWER ? WHERE ( ( a BETWEEN ? AND ? ) )",
+              stmt   => "UPDATE test SET a = ?, b = to_date(?, 'MM/DD/YY'), c = LOWER ? WHERE ( a BETWEEN ? AND ? )",
               bind   => ((a => 1), ({dummy => 1} => '02/02/02'), (c => 'foo'), (a => 1), (a => 2)),
       },
       {
@@ -463,19 +461,19 @@ my @tests =
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => 'id' ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING id',
+              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING id',
               bind => (42, 32),
       },
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => '*' ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING *',
+              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING *',
               bind => (42, 32),
       },
       {
               func => 'update',
               args => \('mytable', { foo => 42 }, where => { baz => 32 }, returning => ('id','created_at') ),
-              stmt => 'UPDATE mytable SET foo = ? WHERE ( baz = ? ) RETURNING id, created_at',
+              stmt => 'UPDATE mytable SET foo = ? WHERE baz = ? RETURNING id, created_at',
               bind => (42, 32),
       };
 
