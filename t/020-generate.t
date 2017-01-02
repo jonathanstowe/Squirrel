@@ -78,7 +78,7 @@ my @tests =
       {
               func   => 'delete',
               args   => \('test', where => {requestor => Any}),
-              stmt   => 'DELETE FROM test WHERE ( requestor IS NULL )',
+              stmt   => 'DELETE FROM test WHERE requestor IS NULL',
               bind   => ()
       },
       {
@@ -87,7 +87,7 @@ my @tests =
                          where => { 'test1.field' => SQL('!= test2.field'),
                             user => {'!=' => 'nwiger'} },
                         ),
-              stmt   => 'DELETE FROM test1, test2, test3 WHERE ( ( ( test1.field != test2.field ) AND ( user != ? ) ) )',
+              stmt   => 'DELETE FROM test1, test2, test3 WHERE test1.field != test2.field AND user != ?',
               bind   => ('nwiger')
       },
       {
@@ -100,19 +100,19 @@ my @tests =
       {
               func   => 'insert',
               args   => \('test', {a => 1, b => 2, c => 3, d => 4, e => 5}),
-              stmt   => 'INSERT INTO test (a, b, c, d, e) VALUES (?, ?, ?, ?, ?)',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test ( a, b, c, d, e ) VALUES ( ?, ?, ?, ?, ? )',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'insert',
               args   => \('test', (1..30)),
-              stmt   => 'INSERT INTO test VALUES (' ~ join(', ', ('?') xx 30) ~ ')',
+              stmt   => 'INSERT INTO test VALUES ( ' ~ join(', ', ('?') xx 30) ~ ' )',
               bind   => (1..30),
       },
       {
               func   => 'insert',
               args   => \('test', (1, 2, 3, 4, 5, Any)),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?, ?)',
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ?, ? )',
               bind   => (1, 2,3,4,5, Any),
       },
       {
@@ -136,20 +136,20 @@ my @tests =
       {
               func   => 'insert',
               args   => ('test.table', {high_limit => SQL('max(all_limits)'), low_limit => 4} ),
-              stmt   => 'INSERT INTO test.table (high_limit, low_limit) VALUES (max(all_limits), ?)',
-              bind   => ('4'),
+              stmt   => 'INSERT INTO test.table ( high_limit, low_limit ) VALUES ( max(all_limits), ? )',
+              bind   => (4),
       },
       {
               func   => 'insert',
               args   => ('test.table', ( SQL('max(all_limits)'), 4 ) ),
-              stmt   => 'INSERT INTO test.table VALUES (max(all_limits), ?)',
-              bind   => ('4'),
+              stmt   => 'INSERT INTO test.table VALUES ( max(all_limits), ? )',
+              bind   => (4),
       },
       {
               func   => 'insert',
               new    => {bindtype => 'columns'},
               args   => ('test.table', {one => 2, three => 4, five => 6} ),
-              stmt   => 'INSERT INTO test.table (five, one, three) VALUES (?, ?, ?)',
+              stmt   => 'INSERT INTO test.table ( five, one, three ) VALUES ( ?, ?, ? )',
               bind   => (('five' => 6), ('one' => 2), ('three' => 4)),
       },
       {
@@ -213,8 +213,8 @@ my @tests =
       {
               func   => 'insert',
               args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", '02/02/02')}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
-              bind   => (<1 02/02/02>),
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, to_date(?, \'MM/DD/YY\') )',
+              bind   => (1, "02/02/02"),
       },
       {
               func   => 'select',
@@ -226,14 +226,14 @@ my @tests =
               func   => 'insert',
               new    => { :array-datatypes},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, ? )',
               bind   => (1, (1, 1, 2, 3, 5, 8)),
       },
       {
               func   => 'insert',
               new    => {bindtype => 'columns', :array-datatypes},
               args   => ('test', {a => 1, b => (1, 1, 2, 3, 5, 8)}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, ?)',
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, ? )',
               bind   => ((a => 1), (b => (1, 1, 2, 3, 5, 8))),
       },
       {
@@ -265,7 +265,7 @@ my @tests =
       { 
               func   => 'insert',
               args   => ('test', {a => 1, b => 2, c => 3, d => 4, e => { answer => 42 }}),
-              stmt   => 'INSERT INTO test (a, b, c, d, e) VALUES (?, ?, ?, ?, ?)',
+              stmt   => 'INSERT INTO test ( a, b, c, d, e ) VALUES ( ?, ?, ?, ?, ? )',
               bind   => (1, 2, 3, 4,  answer => 42),
       },
       {
@@ -277,8 +277,8 @@ my @tests =
       {
               func   => 'insert',
               args   => ('test', {a => 1, b => SQL("42")}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, 42)',
-              bind   => (<1>),
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, 42 )',
+              bind   => (1),
       },
       {
               func   => 'select',
@@ -296,7 +296,7 @@ my @tests =
               func   => 'insert',
               new    => {bindtype => 'columns'},
               args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", (dummy => '02/02/02'))}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, to_date(?, \'MM/DD/YY\') )',
               bind   => ((a => 1), (dummy => '02/02/02')),
       },
       {
@@ -338,7 +338,7 @@ my @tests =
               func   => 'insert',
               new    => {bindtype => 'columns'},
               args   => ('test', {a => 1, b => SQL("to_date(?, 'MM/DD/YY')", ({dummy => 1} => '02/02/02'))}),
-              stmt   => 'INSERT INTO test (a, b) VALUES (?, to_date(?, \'MM/DD/YY\'))',
+              stmt   => 'INSERT INTO test ( a, b ) VALUES ( ?, to_date(?, \'MM/DD/YY\') )',
               bind   => ((a => 1), ({dummy => 1} => '02/02/02')),
       },
       {
@@ -387,32 +387,32 @@ my @tests =
       {
               func   => 'insert',
               args   => \('test', (qw/1 2 3 4 5/), returning => 'id' ),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?) RETURNING id',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ? ) RETURNING id',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'insert',
               args   => \('test', (qw/1 2 3 4 5/), returning => 'id, foo, bar' ),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?) RETURNING id, foo, bar',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ? ) RETURNING id, foo, bar',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'insert',
               args   => \('test', (qw/1 2 3 4 5/), returning => (<id  foo  bar> ) ),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?) RETURNING id, foo, bar',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ? ) RETURNING id, foo, bar',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'insert',
               args   => \('test', (qw/1 2 3 4 5/),  returning => 'id, foo, bar' ),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?) RETURNING id, foo, bar',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ? ) RETURNING id, foo, bar',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'insert',
               args   => \('test', (qw/1 2 3 4 5/),  returning => 'id' ),
-              stmt   => 'INSERT INTO test VALUES (?, ?, ?, ?, ?) RETURNING id',
-              bind   => (qw/1 2 3 4 5/),
+              stmt   => 'INSERT INTO test VALUES ( ?, ?, ?, ?, ? ) RETURNING id',
+              bind   => (1,2,3,4,5),
       },
       {
               func   => 'select',
