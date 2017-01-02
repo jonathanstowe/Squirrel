@@ -773,14 +773,14 @@ class Squirrel {
              }
              elsif self.use-special-op($key, $op, $val) {
                  self.debug("use-special-up said yes to $key $op");
-                 $sub-clause = self.where-special-op($key, $op, $val);
+                 $sub-clause = self.special-op($key, $op, $val);
              }
              else {
                  # TODO : vigourous refactoring
                  given $val {
                      when Positional {
-                         self.debug("Positional { $val.perl } trying where-field-op");
-                         $sub-clause = self.where-field-op($key, $op, $val, :$inner);
+                         self.debug("Positional { $val.perl } trying field-op");
+                         $sub-clause = self.field-op($key, $op, $val, :$inner);
                      }
                      when Any:U {
                          self.debug("NULL with $op");
@@ -832,10 +832,10 @@ class Squirrel {
          }
      
          method use-special-op($key, $op, $value) {
-             ?self.^lookup('where-special-op').cando(Capture.from-args(self, $key, $op, $value))
+             ?self.^lookup('special-op').cando(Capture.from-args(self, $key, $op, $value))
          }
      
-         proto method where-special-op(|c) { * }
+         proto method special-op(|c) { * }
      
          class X::IllegalOperator is Exception {
              has Str $.op is required;
@@ -848,14 +848,14 @@ class Squirrel {
      
      
      
-         multi method where-special-op(Str $key, Str $op where /:i^ is ( \s+ not )?     $/, Any:U $) returns Clause {
+         multi method special-op(Str $key, Str $op where /:i^ is ( \s+ not )?     $/, Any:U $) returns Clause {
              Expression.new(sql => (self.convert(self.quote($key)), ($op, 'null').map(-> $v { self.sqlcase($v) })).join(' '));
      
          }
      
-         proto method where-field-op(|c) { * }
+         proto method field-op(|c) { * }
      
-         multi method where-field-op(Str $key, Str $op, @vals where *.elems > 0, Bool :$inner) returns Clause {
+         multi method field-op(Str $key, Str $op, @vals where *.elems > 0, Bool :$inner) returns Clause {
              my @values  = @vals;
              my $logic = 'or';
              if @values[0].defined && @values[0] ~~ m:i/^ \- $<logic>=( AND|OR ) $/ {
@@ -865,11 +865,11 @@ class Squirrel {
              ExpressionGroup.new(clauses =>self.build-expression(@values.map( -> $v { $key => $op =>  $v }), $logic), :$logic, :$inner, :$!case);
          }
      
-         multi method where-field-op(Str $key, Str:D $op where $!equality-op, @values where *.elems == 0, Bool :$inner) returns Clause {
+         multi method field-op(Str $key, Str:D $op where $!equality-op, @values where *.elems == 0, Bool :$inner) returns Clause {
              Expression.new(sql => $!sqlfalse);
          }
      
-         multi method where-field-op(Str $key, Str:D $op where $!inequality-op, @values where *.elems == 0, Bool :$inner) {
+         multi method field-op(Str $key, Str:D $op where $!inequality-op, @values where *.elems == 0, Bool :$inner) {
              Expression.new(sql => $!sqltrue);
          }
      
@@ -898,7 +898,7 @@ class Squirrel {
              }
          }
 
-         multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) returns Clause {
+         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) returns Clause {
              self.debug("between with { @values.perl }");
              my $label           = self.convert($key, :quote);
              my $and             = self.sqlcase('and');
@@ -936,8 +936,8 @@ class Squirrel {
              $l but SqlLiteral
          }
      
-         multi method where-special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) returns Clause {
-             self.where-special-op: $key, $op, @values;
+         multi method special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) returns Clause {
+             self.special-op: $key, $op, @values;
          }
      
         class In does Clause {
@@ -958,7 +958,7 @@ class Squirrel {
             }
         }
 
-         multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) returns Clause {
+         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) returns Clause {
              self.debug("Literal") if @values ~~ SqlLiteral;
              self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
              my $label       = self.convert($key, :quote);
@@ -989,12 +989,12 @@ class Squirrel {
              In.new(:$op, :$label, :@clauses);
          }
      
-         multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) returns Clause {
+         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) returns Clause {
              my $sql = $op ~~ m:i/<|w>not<|w>/ ?? $!sqltrue !! $!sqlfalse;
              Expression.new(:$sql);
          }
      
-         multi method where-special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) returns Clause {
+         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) returns Clause {
              my $label       = self.convert($key, :quote);
              $op             = self.sqlcase($op);
              my ( $sql, @bind) = $values.list;
