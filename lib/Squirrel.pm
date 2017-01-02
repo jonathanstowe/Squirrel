@@ -400,94 +400,120 @@ class Squirrel {
 
 
 
+    class InsertValues does Clause {
+        has Clause @.clauses;
+        has Str @.fields;
+
+        method sql() returns Str {
+            $!sql //= ( self.field-list.defined ?? self.field-list ~ ' ' !! '' ) 
+                      ~ self.sqlcase('values') ~ ' ( ' ~ @!clauses.map({ $_.sql }).join(', ') ~ ' )';
+
+        }
+
+        method bind() {
+            self.debug("getting bind");
+            @!clauses.flatmap({ $_.bind });
+        }
+
+        method field-list() returns Str {
+            my Str $fields;
+            if @!fields.elems > 0 {
+                $fields = '( ' ~ @!fields.join(', ') ~ ' )';
+            }
+            $fields;
+        }
+    }
 
     class Insert does Statement {
 
         has Str $.table;
 
-        has Clause $.clause;
+        has Clause $.clauses;
+        has Returning $.returning;
 
         has $.data;
 
+        method clauses() returns Clause {
+            $!clauses //= self.build-insert();
+        }
+
+        method bind() {
+            self.clauses.bind;
+        }
 
 
         proto method build-insert(|c) { * }
 
-        multi method build-insert(%data) {
+        multi method build-insert() returns Clause {
+            self.build-insert($!data);
+        }
+
+        multi method build-insert(%data) returns Clause {
             self.debug('Hash');
-
-            my @fields = %data.keys.sort.map( -> $v { self.quote($v) });
-
-            my ($sql, @bind) = self.insert-values(%data).flat;
-
-            $sql = '(' ~ @fields.join(', ') ~ ') ' ~ $sql;
-            ($sql, @bind);
+            self.insert-values(%data);
         }
 
         class X::InvalidBindType is Exception {
             has Str $.message;
         }
 
-        multi method build-insert(@data) {
-
+        multi method build-insert(@data) returns Clause {
             self.debug("Array");
 
             if $!bindtype eq 'columns' {
                 X::InvalidBindType.new(message => "can't do 'columns' bindtype when called with arrayref").throw;
             }
 
-            my @values;
-            my @all-bind;
+            # TODO: pass on the config
+            my $iv = InsertValues.new;
 
-            for @data.flat -> $value {
-                my ($values, @bind) = self.insert-value(Str, $value).flat;
-                @values.append: $values;
-                @all-bind.append: @bind;
+            for @data -> $value {
+                $iv.clauses.append: self.insert-value(Str, $value);
             }
-
-            my $sql = self.sqlcase('values') ~ ' (' ~ @values.join(", ") ~ ')';
-            self.debug("returning ($sql, { @all-bind.perl }");
-            flat ($sql, @all-bind);
+            $iv;
         }
 
 
 
-        multi method build-insert(SqlLiteral $data ( $sql, @bind)) {
+        multi method build-insert(SqlLiteral $data ( $sql, @bind)) returns Clause {
             self.assert-bindval-matches-bindtype(@bind);
             ($sql, @bind);
         }
 
 
-        multi method build-insert(Str $data) {
+        multi method build-insert(Str $data) returns Clause {
             flat ($data, Empty);
         }
 
-        method insert-values(%data) {
+        method insert-values(%data) returns Clause {
 
-            my (@values, @all-bind);
 
+            my $iv = InsertValues.new;
             for %data.pairs.sort(*.key) -> $p {
-                my ($values, @bind) = self.insert-value($p);
-                @values.append: $values;
-                @all-bind.append: @bind;
+                $iv.fields.append: $p.key;
+                $iv.clauses.append: self.insert-value($p);
             }
-            my $sql = self.sqlcase('values') ~ ' (' ~ @values.join(", ") ~ ')';
-            flat ($sql, @all-bind);
+
+            $iv;
         }
 
         proto method insert-value(|c) { * }
 
-        multi method insert-value(Pair $p) {
+        multi method insert-value(Pair $p) returns Clause {
             self.debug("pair");
             self.insert-value($p.key, $p.value);
         }
 
-        multi method insert-value(Str $column, @value) {
+        class Placeholder does Clause {
+            method sql() returns Str {
+                '?'
+            }
+        }
+        multi method insert-value(Str $column, @value where { $_ !~~ SqlLiteral }) returns Clause {
             self.debug("array value { @value.perl }");
             my (@values, @all-bind);
             if $!array-datatypes {
-                @values.append: '?';
-                @all-bind.append: self.apply-bindtype($column, @value).flat;
+                Placeholder.new(bind => self.apply-bindtype($column, @value));
             }
             else {
                 my ( $sql, @bind) = @value;
@@ -495,18 +521,15 @@ class Squirrel {
                 @values.append: $sql;
                 @all-bind.append: @bind;
             }
-            (@values.join(', '), @all-bind);
         }
 
-        multi method insert-value(Str $column, %value) {
+        multi method insert-value(Str $column, %value) returns Clause {
             self.debug("hash value");
             my (@values, @all-bind);
-            @values.append: '?';
-            @all-bind.append: self.apply-bindtype($column, %value).flat;
-            (@values.join(', '), @all-bind);
+            Placeholder.new(bind => self.apply-bindtype($column, %value).flat);
         }
 
-        multi method insert-value(Str $column, $value) {
+        multi method insert-value(Str $column, $value where { $_ !~~ SqlLiteral }) returns Clause {
             self.debug("plain value { $value // '<undefined>' }");
             my $v = do if $value ~~ Str {
                 my $a = val($value);
@@ -520,28 +543,31 @@ class Squirrel {
             else {
                 $value
             }
-            (('?'), self.apply-bindtype($column, $v));
+            Placeholder.new(bind => self.apply-bindtype($column, $v));
         }
 
-        multi method insert-value(Str $column, SqlLiteral $value ( $sql, @bind) ) {
-            ($sql, @bind);
+        multi method insert-value(Str $column, SqlLiteral $value ) returns Clause {
+            Expression.new(sql => $value.sql, bind => $value.bind);
+        }
+
+        method sql() returns Str {
+            my $sql = (self.sqlcase('insert into'), self.table, self.clauses.sql).join(" ");
+            $sql ~= ' ' ~ $!returning.sql if $!returning;
+            $sql;
         }
     }
 
-    method insert($table, $data, *%options) {
-        my $table-name   = self.table($table);
+    method insert($table, $data, :$returning) {
 
-        my ($sql, @bind) = self.build-insert($data).flat;
+        my %args = (:$table, :$data, |self.config);
 
-        $sql = (self.sqlcase('insert into'), $table-name, $sql).join(" ");
 
-        if %options<returning> -> $returning {
-            my ($s, @b) = self.returning($returning);
-            $sql ~= $s;
-            @bind.append(@b);
+
+        if $returning {
+            %args<returning> = Returning.new(fields => $returning, |self.config);
         }
 
-        ($sql, @bind);
+        Insert.new(|%args);
     }
 
  
@@ -1248,13 +1274,28 @@ class Squirrel {
         Select.new(|%args, |self.config);
     }
 
+    class Delete does Statement {
+        has Where $.where;
+        has $.table;
+
+        method table() returns Str {
+            $!table.join(', ');
+        }
+
+        method sql() returns Str {
+            $!sql //= (self.sqlcase('delete from'), self.table, $!where.defined ?? $!where.sql !! '').join(' ');
+        }
+
+        method bind() {
+            $!where.defined ?? $!where.bind !! ();
+        }
+    }
+
     method delete($table, :$where) {
-        my $table-name = self.table($table);
+        my %args = :$table, |self.config;
 
-        my ($where-sql, @bind) = self.where($where).flat;
-        my $sql = self.sqlcase('delete from') ~ " $table-name" ~ $where-sql;
-
-        ($sql, @bind);
+        %args<where> = Where.new(:$where, |self.config) if $where;
+        Delete.new(|%args);
     }
 
 
