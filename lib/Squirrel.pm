@@ -282,7 +282,7 @@ class Squirrel {
 
     role Operators {
 
-        proto method build-where(|c) { * }
+        proto method build-expression(|c) { * }
 
         my subset FallbackOp of Str:D where { $_ !~~ m:i/(bool|and|or|ident|nest|value)/ };
 
@@ -302,7 +302,7 @@ class Squirrel {
 
         multi method unary-op(FallbackOp $op, $rhs) returns Clause {
             self.debug("with $op and { $rhs.perl }");
-            my $clause = self.build-where($rhs);
+            my $clause = self.build-expression($rhs);
             Expression.new(sql => (sprintf '%s %s', self.sqlcase($op), $clause.sql(:inner)), bind => $clause.bind);
         }
      
@@ -310,18 +310,18 @@ class Squirrel {
          # not really enhancing the reputation with regard to the line-noise thing 
         multi method unary-op(Str $op where /:i^ and  ( [_\s]? \d+ )? $/|/:i^ or   ( [_\s]? \d+ )? $/,  @value) returns Clause {
             self.debug("array with $op");
-            self.build-where(@value, logic => $op, :inner);
+            self.build-expression(@value, logic => $op, :inner);
         }
      
         multi method unary-op(Str:D $op where /:i^ or   ( [_\s]? \d+ )? $/, %value) returns Clause {
             self.debug("hash with $op");
             my @value = %value.pairs.sort(*.key);
-            self.build-where(@value, logic => $op, :inner);
+            self.build-expression(@value, logic => $op, :inner);
         }
      
          multi method unary-op(Str:D $op where /:i^ and  ( [_\s]? \d+ )? $/, %value) returns Clause {
             self.debug("hash with $op");
-             self.build-where(%value, :inner);
+             self.build-expression(%value, :inner);
          }
      
          multi method unary-op(Str $op where /:i^ nest ( [_\s]? \d+ )? $/, Str:D $value) returns Clause {
@@ -329,7 +329,7 @@ class Squirrel {
          }
          
          multi method unary-op(Str $op where /:i^ nest ( [_\s]? \d+ )? $/, $value) returns Clause {
-             self.build-where($value, :inner);
+             self.build-expression($value, :inner);
          }
      
          multi method unary-op(Str:D $op where /:i^  bool   $/, Str:D $value) returns Clause {
@@ -339,7 +339,7 @@ class Squirrel {
      
          multi method unary-op(Str:D $op where /:i^ bool     $/, $value) returns Clause {
              self.debug("bool with other $value");
-             self.build-where($value);
+             self.build-expression($value);
          }
      
          multi method unary-op(Str:D $op where m:i/^ ( not \s ) bool     $/, $value) returns Clause {
@@ -586,21 +586,21 @@ class Squirrel {
      
 
         method clause() returns Clause handles <bind> {
-            $!clause //= self.build-where($!where);
+            $!clause //= self.build-expression($!where);
         }
      
-        proto method build-where(|c) { * }
+        proto method build-expression(|c) { * }
      
      
-        multi method build-where(@where, Any:U $logic?) returns Clause {
-            self.build-where: @where, :$!logic;
+        multi method build-expression(@where, Any:U $logic?) returns Clause {
+            self.build-expression: @where, :$!logic;
         }
      
-        multi method build-where(@where, Logic $logic) returns Clause {
-            self.build-where: @where, :$logic;
+        multi method build-expression(@where, Logic $logic) returns Clause {
+            self.build-expression: @where, :$logic;
         }
      
-        multi method build-where(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
+        multi method build-expression(@where, Logic :$logic = 'OR', Bool :$inner) returns Clause {
              my @clauses = @where;
              self.debug("(Array) got clauses { @where.perl } with $logic");
      
@@ -611,20 +611,20 @@ class Squirrel {
                  my Clause $sub-clause = do given $el {
                      when Positional {
                          self.debug("positional clause");
-                         self.build-where($el, :$logic, :inner);
+                         self.build-expression($el, :$logic, :inner);
                      }
                      when Associative|Pair {
                          self.debug("pair clause { $el.perl }");
                          next unless $el.keys.elems; # Skip empty
-                         self.build-where($el, logic => 'and', :inner);
+                         self.build-expression($el, logic => 'and', :inner);
                      }
                      when Str {
                          self.debug("Str clause");
-                         self.build-where($el => @clauses.shift, :$logic);
+                         self.build-expression($el => @clauses.shift, :$logic);
                      }
                      default {
                          self.debug("fallback with { $el.perl } and logic ($logic)");
-                         self.build-where($el, :$logic);
+                         self.build-expression($el, :$logic);
                      }
                  }
 
@@ -634,23 +634,23 @@ class Squirrel {
         }
      
      
-         multi method build-where(Logic :$logic, *%where) {
+         multi method build-expression(Logic :$logic, *%where) {
              self.debug("slurpy hash");
-             self.build-where: %where, :$logic;
+             self.build-expression: %where, :$logic;
          }
      
-         multi method build-where($where, Logic :$logic) {
+         multi method build-expression($where, Logic :$logic) {
              self.debug("Dumb with { $where.perl }");
              Expression.new(sql => $where);
          }
      
         # Awful
-        multi method build-where($where) {
+        multi method build-expression($where) {
             self.debug("Fallback with { $where.perl }");
-            self.build-where: $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
+            self.build-expression: $where, logic => ( $where ~~ Positional ?? 'OR' !! 'AND'), inner => False;
         }
 
-        multi method build-where(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
+        multi method build-expression(%where where * !~~ Pair, Logic :$logic, Bool :$inner) returns Clause {
      
             my ExpressionGroup $clauses = ExpressionGroup.new(:$logic, :$inner, :$!case);
             self.debug("hash -> { %where.perl } with $logic ");
@@ -658,7 +658,7 @@ class Squirrel {
             my Bool $inner-inner = $inner || %where.pairs.elems > 1;
             for %where.pairs.sort(*.key) -> Pair $pair {
                 self.debug("got pair { $pair.perl } ");
-                my Clause $sub-clause = self.build-where($pair, inner => $inner-inner);
+                my Clause $sub-clause = self.build-expression($pair, inner => $inner-inner);
                 $clauses.append: $sub-clause;
             }
             $clauses;
@@ -667,57 +667,57 @@ class Squirrel {
          role LiteralPair does SqlLiteral {
          }
      
-         multi method build-where(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value)) returns Clause {
+         multi method build-expression(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value)) returns Clause {
              my $op = $key.substr(1).trim.subst(/^not_/, 'NOT ', :i);
              self.debug("Pair not Literal but Key is $key (op is $op)");
              self.unary-op($op, $value);
          }
 
-         multi method build-where(Pair $p ( Str :$key, :$value where Stringy|Numeric )) returns Clause {
+         multi method build-expression(Pair $p ( Str :$key, :$value where Stringy|Numeric )) returns Clause {
              self.debug("Pair with Stringy|Numeric value");
             # TODO: Equality expression
              Expression.new(sql => "$key { self.sqlcase($!cmp // '=') } ?", bind => self.apply-bindtype($key, $value));
          }
      
      
-         multi method build-where(Pair $p where * !~~ LiteralPair ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 )) returns Clause {
+         multi method build-expression(Pair $p where * !~~ LiteralPair ( Str:D :$key where { $_  ~~ m:i/^\-[AND|OR]$/ }, :@value where *.elems > 0 )) returns Clause {
              my $new-logic = $key.substr(1).lc;
              self.debug("got a pair with an/or op will redispatch with logic $new-logic");
-             self.build-where: @value, logic => $new-logic;
+             self.build-expression: @value, logic => $new-logic;
          }
      
      
-         multi method build-where(Pair $p where * !~~ LiteralPair ( :$key, :@value where { $_ !~~ SqlLiteral && $_.elems > 0 }), Logic :$logic = 'OR') returns Clause {
+         multi method build-expression(Pair $p where * !~~ LiteralPair ( :$key, :@value where { $_ !~~ SqlLiteral && $_.elems > 0 }), Logic :$logic = 'OR') returns Clause {
              my @values = @value;
              self.debug("pair $key => { @values.perl } logic({ $logic // '<undefined>'})");
              self.debug($p.WHAT);
              my @distributed = @values.map(-> $v { $key => $v });
      
              self.debug("redistributing array with '{ $logic // "<undefined>" }' with a { @distributed.perl }");
-             self.build-where(@distributed, :$logic, :inner);
+             self.build-expression(@distributed, :$logic, :inner);
          }
      
-         multi method build-where(Pair $p ( :$key, :@value where *.elems == 0)) returns Clause {
+         multi method build-expression(Pair $p ( :$key, :@value where *.elems == 0)) returns Clause {
              Expression.new( sql => $!sqlfalse);
          }
      
-         multi method build-where(Pair $p ( :$key, Any:U :$value), Logic :$logic) returns Clause {
+         multi method build-expression(Pair $p ( :$key, Any:U :$value), Logic :$logic) returns Clause {
              Expression.new(sql => self.quote($key) ~ self.sqlcase(" is null"));
          }
      
-        multi method build-where(Pair $p ( :$key where /^'-'/, SqlLiteral :$value) ) returns Clause {
+        multi method build-expression(Pair $p ( :$key where /^'-'/, SqlLiteral :$value) ) returns Clause {
              self.debug("got pair  with SqlLiteral value { $p.perl } but op key");
              my $clause = self.unary-op($key, $value[0]);
              $clause.bind.append($value[1..*]) if $value.elems > 1;
              $clause;
         }
      
-         multi method build-where(Pair $p ( :$key, SqlLiteral :$value ) ) returns Clause {
+         multi method build-expression(Pair $p ( :$key, SqlLiteral :$value ) ) returns Clause {
              self.debug("got pair  with SqlLiteral value { $p.perl }");
-             self.build-where: $p but LiteralPair;
+             self.build-expression: $p but LiteralPair;
          }
      
-         multi method build-where(LiteralPair $p (:$key, :@value where *.elems > 1)) returns Clause {
+         multi method build-expression(LiteralPair $p (:$key, :@value where *.elems > 1)) returns Clause {
              self.debug("Literal pair { $p.perl }");
              my $sql = @value[0];
              self.debug("Got bind from literal { @value[1..*] }");
@@ -725,7 +725,7 @@ class Squirrel {
              Expression.new(sql => $s, bind => @value[1..*]);
          }
      
-         multi method build-where(LiteralPair $p (:$key, :@value where *.elems == 1)) returns Clause {
+         multi method build-expression(LiteralPair $p (:$key, :@value where *.elems == 1)) returns Clause {
              self.debug("Literal pair (no bind) { $p.perl }");
              my ($sql) = @value;
              my $s = self.quote($key) ~ " $sql";
@@ -733,32 +733,32 @@ class Squirrel {
          }
      
      
-         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems > 1 }) returns Clause {
+         multi method build-expression(@value where { $_ ~~ SqlLiteral && $_.elems > 1 }) returns Clause {
              self.debug("SqlLiteral with more bind");
              my ($sql, $bind) = @value;
              Expression.new(sql => $sql, bind => $bind.flat);
          }
      
-         multi method build-where(@value where { $_ ~~ SqlLiteral && $_.elems == 1 })  returns Clause {
+         multi method build-expression(@value where { $_ ~~ SqlLiteral && $_.elems == 1 })  returns Clause {
              self.debug("SqlLiteral with no bind");
              my ($sql) = @value;
              Expression.new( sql => $sql);
          }
      
      
-        multi method build-where(Pair $p ( Str :$key, Clause :$value ), Logic :$logic, Bool :$inner ) returns Clause {
+        multi method build-expression(Pair $p ( Str :$key, Clause :$value ), Logic :$logic, Bool :$inner ) returns Clause {
             my $sql = sprintf "%s %s", $key, $value.sql;
             Expression.new(:$sql, bind => $value.bind);
         }
 
-         multi method build-where(Pair $p ( :$key, Pair :$value (:key($orig-op), SqlLiteral :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
+         multi method build-expression(Pair $p ( :$key, Pair :$value (:key($orig-op), SqlLiteral :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
              self.debug("Pair with SqlLiteral pair value");
-             my $inner-clause = self.build-where($value, :$logic, :$inner);
-             self.build-where($key => $inner-clause, :$logic, :$inner);
+             my $inner-clause = self.build-expression($value, :$logic, :$inner);
+             self.build-expression($key => $inner-clause, :$logic, :$inner);
          }
 
          
-         multi method build-where(Pair $p ( :$key, Pair :$value (:key($orig-op), :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
+         multi method build-expression(Pair $p ( :$key, Pair :$value (:key($orig-op), :value($val) ) ), Logic :$logic = 'or', Bool :$inner) returns Clause {
              self.debug("Pair with pair value : { $p.perl }");
 
              my Clause $sub-clause;
@@ -769,7 +769,7 @@ class Squirrel {
  
              if $orig-op ~~ m:i/^\-$<logic>=(and|or)/ {
                  self.debug("passing on the logic {  ~$/<logic> }");
-                 $sub-clause = self.build-where($key => $val, logic => ~$/<logic>);
+                 $sub-clause = self.build-expression($key => $val, logic => ~$/<logic>);
              }
              elsif self.use-special-op($key, $op, $val) {
                  self.debug("use-special-up said yes to $key $op");
@@ -810,13 +810,13 @@ class Squirrel {
              }
              $sub-clause;
          }
-         multi method build-where(Pair $p ( :$key, :%value where { $_.keys.elems == 1}), Logic :$logic = 'or', Bool :$inner) returns Clause {
+         multi method build-expression(Pair $p ( :$key, :%value where { $_.keys.elems == 1}), Logic :$logic = 'or', Bool :$inner) returns Clause {
              my $*NESTED-FUNC-LHS = $key;
              self.debug("Pair with Pairish value");
-             self.build-where($key => %value.pairs.first, :$logic, :$inner);
+             self.build-expression($key => %value.pairs.first, :$logic, :$inner);
          }
      
-         multi method build-where(Pair $p ( :$key, :%value where { $_.keys.elems > 1}), Logic :$logic = 'and', Bool :$inner) returns Clause {
+         multi method build-expression(Pair $p ( :$key, :%value where { $_.keys.elems > 1}), Logic :$logic = 'and', Bool :$inner) returns Clause {
              self.debug("Got a pair with a hash value");
              my $*NESTED-FUNC-LHS = $*NESTED-FUNC-LHS // $key;
      
@@ -824,7 +824,7 @@ class Squirrel {
 
              for %value.pairs.sort(*.key) -> $pair (:key($orig-op), :value($val)) {
                  self.debug("pair { $orig-op => $val.perl }");
-                 my Clause $sub-clause = self.build-where($key => $pair, :$logic);
+                 my Clause $sub-clause = self.build-expression($key => $pair, :$logic);
      
                 $clauses.clauses.append: $sub-clause;
              }
@@ -862,7 +862,7 @@ class Squirrel {
                  $logic = $/<logic>.Str.uc;
                  @values.shift;
              }
-             ExpressionGroup.new(clauses =>self.build-where(@values.map( -> $v { $key => $op =>  $v }), $logic), :$logic, :$inner, :$!case);
+             ExpressionGroup.new(clauses =>self.build-expression(@values.map( -> $v { $key => $op =>  $v }), $logic), :$logic, :$inner, :$!case);
          }
      
          multi method where-field-op(Str $key, Str:D $op where $!equality-op, @values where *.elems == 0, Bool :$inner) returns Clause {
