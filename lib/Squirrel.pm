@@ -34,46 +34,6 @@ class Squirrel {
 
     role LiteralValue { }
 
-    role SqlLiteral does LiteralValue {
-        method sql() {
-            self.list[0]
-        }
-
-        method bind() {
-            if self.list.elems > 1 {
-                self.list[1..*]
-            }
-            else {
-                [];
-            }
-        }
-    }
-
-    multi sub SQL($literal, *@bind) returns LiteralValue is export {
-        [$literal, |@bind] but SqlLiteral
-    }
-
-    multi sub SQL($literal) returns LiteralValue is export {
-        [$literal] but SqlLiteral
-    }
-
-
-    sub is-literal-value($value) returns Bool {
-        $value ~~ LiteralValue;
-    }
-
-
-    multi sub is-plain-value(Stringy $) returns Bool {
-        True
-    }
-
-    multi sub is-plain-value(Numeric $) returns Bool {
-        True
-    }
-
-    multi sub is-plain-value($) returns Bool {
-        False;
-    }
 
     subset Logic of Str where { $_.defined && $_.uc ~~ "OR"|"AND" };
 
@@ -156,7 +116,7 @@ class Squirrel {
             ''
         }
 
-        method convert($arg, Bool :$quote = False) {
+        multi method convert($arg, Bool :$quote = False) {
             my $convert-arg = $quote ?? self.quote($arg) !! $arg;
             if $!convert {
                 self.sqlcase($!convert ~'(' ~ $convert-arg ~ ')');
@@ -227,6 +187,38 @@ class Squirrel {
                 X::Injection.new(:$sql, class => self.^name).throw;
             }
         }
+    }
+
+    class SqlLiteral does Clause does LiteralValue {
+        method list() {
+            [$!sql, @!bind.flat];
+        }
+    }
+
+    multi sub SQL(Str $sql, *@bind) returns LiteralValue is export {
+        SqlLiteral.new(:$sql, :@bind);
+    }
+
+    multi sub SQL(Str $sql) returns LiteralValue is export {
+        SqlLiteral.new(:$sql);
+    }
+
+
+    sub is-literal-value($value) returns Bool {
+        $value ~~ LiteralValue;
+    }
+
+
+    multi sub is-plain-value(Stringy $) returns Bool {
+        True
+    }
+
+    multi sub is-plain-value(Numeric $) returns Bool {
+        True
+    }
+
+    multi sub is-plain-value($) returns Bool {
+        False;
     }
 
     class Expression does Clause {
@@ -475,9 +467,9 @@ class Squirrel {
 
 
 
-        multi method build-insert(SqlLiteral $data ( $sql, @bind)) returns Clause {
-            self.assert-bindval-matches-bindtype(@bind);
-            ($sql, @bind);
+        multi method build-insert(Clause $data ) returns Clause {
+            self.assert-bindval-matches-bindtype($data.bind);
+            $data;
         }
 
 
@@ -509,7 +501,7 @@ class Squirrel {
                 '?'
             }
         }
-        multi method insert-value(Str $column, @value where { $_ !~~ SqlLiteral }) returns Clause {
+        multi method insert-value(Str $column, @value ) returns Clause {
             self.debug("array value { @value.perl }");
             my (@values, @all-bind);
             if $!array-datatypes {
@@ -547,7 +539,7 @@ class Squirrel {
         }
 
         multi method insert-value(Str $column, SqlLiteral $value ) returns Clause {
-            Expression.new(sql => $value.sql, bind => $value.bind);
+            $value;
         }
 
         method sql() returns Str {
@@ -664,7 +656,7 @@ class Squirrel {
             $clauses;
          }
      
-         role LiteralPair does SqlLiteral {
+         role LiteralPair does Clause {
          }
      
          multi method build-expression(Pair $p where * !~~ LiteralPair ( Str :$key where * ~~ /^\-./, :$value)) returns Clause {
@@ -712,37 +704,9 @@ class Squirrel {
              $clause;
         }
      
-         multi method build-expression(Pair $p ( :$key, SqlLiteral :$value ) ) returns Clause {
-             self.debug("got pair  with SqlLiteral value { $p.perl }");
-             self.build-expression: $p but LiteralPair;
-         }
-     
-         multi method build-expression(LiteralPair $p (:$key, :@value where *.elems > 1)) returns Clause {
-             self.debug("Literal pair { $p.perl }");
-             my $sql = @value[0];
-             self.debug("Got bind from literal { @value[1..*] }");
-             my $s = self.quote($key) ~ " $sql";
-             Expression.new(sql => $s, bind => @value[1..*]);
-         }
-     
-         multi method build-expression(LiteralPair $p (:$key, :@value where *.elems == 1)) returns Clause {
-             self.debug("Literal pair (no bind) { $p.perl }");
-             my ($sql) = @value;
-             my $s = self.quote($key) ~ " $sql";
-             Expression.new(sql => $s);
-         }
-     
-     
-         multi method build-expression(@value where { $_ ~~ SqlLiteral && $_.elems > 1 }) returns Clause {
-             self.debug("SqlLiteral with more bind");
-             my ($sql, $bind) = @value;
-             Expression.new(sql => $sql, bind => $bind.flat);
-         }
-     
-         multi method build-expression(@value where { $_ ~~ SqlLiteral && $_.elems == 1 })  returns Clause {
-             self.debug("SqlLiteral with no bind");
-             my ($sql) = @value;
-             Expression.new( sql => $sql);
+         multi method build-expression(Clause $value )  returns Clause {
+             self.debug("Maybe SqlLiteral");
+             $value;
          }
      
      
