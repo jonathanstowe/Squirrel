@@ -54,4 +54,4 @@ Please send a PR or raise an issue at https://github.com/jonathanstowe/Squirrel/
 This is free software, please see the [LICENCE](LICENCE) file in the
 distribution for details.
 
-© Jonathan Stowe 2016
+© Jonathan Stowe 2016, 2017
