@@ -1,0 +1,24 @@
+{
+   "tags" : [ "sql", "database", "abstracr" ],
+   "depends" : [],
+   "name" : "Squirrel",
+   "version" : "0.0.1",
+   "resources" : [],
+   "perl" : "6.c",
+   "support" : {
+      "source" : "https://github.com/jonathanstowe/Squirrel.git"
+   },
+   "meta6" : "0",
+   "source-url" : "https://github.com/jonathanstowe/Squirrel.git",
+   "auth" : "github:jonathanstowe",
+   "authors" : [
+      "Jonathan Stowe <jns+gh@gellyfish.co.uk>"
+   ],
+   "description" : "Simplified abstraction for SQL generation",
+   "test-depends" : [],
+   "build-depends" : [],
+   "license" : "perl",
+   "provides" : {
+      "Squirrel" : "lib/Squirrel.pm"
+   }
+}
