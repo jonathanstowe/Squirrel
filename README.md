@@ -2,6 +2,8 @@
 
 Simplified abstraction for SQL generation
 
+[![Build Status](https://travis-ci.org/jonathanstowe/Squirrel.svg?branch=master)](https://travis-ci.org/jonathanstowe/Squirrel)
+
 ## Synopsis
 
 ```perl6
