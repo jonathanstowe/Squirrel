@@ -162,6 +162,7 @@ class Squirrel {
         my class X::InvalidBind is Exception {
             has Str $.message = "bindtype 'columns' selected, you need to pass: [column_name => bind_value]";
         }
+
         method assert-bindval-matches-bindtype(*@bind) {
             if $!bindtype eq 'columns' {
                 for @bind -> $item {
@@ -172,6 +173,7 @@ class Squirrel {
                 }
             }
         }
+
         my class X::Injection is Exception {
             has Str $.sql is required;
             has Str $.class is required;
@@ -841,68 +843,68 @@ class Squirrel {
      
          # BETWEEN
 
-         class Between does Clause {
-             has Clause $.lhs is required;
-             has Clause $.rhs is required;
-             has Str    $.op  = 'BETWEEN'; # fix case
-             has Str    $.label is required;
-             has Str    $.and = 'AND'; # fix case;
+        class Between does Clause {
+            has Clause $.lhs is required;
+            has Clause $.rhs is required;
+            has Str    $.op  = 'BETWEEN'; # fix case
+            has Str    $.label is required;
+            has Str    $.and = 'AND'; # fix case;
 
 
 
-             method sql() returns Str {
-                 $!sql //= "( { $!label } { $!op } { $!lhs.sql } { $!and } { $!rhs.sql } )";
-             }
+            method sql() returns Str {
+                $!sql //= "( { $!label } { $!op } { $!lhs.sql } { $!and } { $!rhs.sql } )";
+            }
 
-             method bind() {
-                 my @bind;
-                 @bind.append: $!lhs.bind;
-                 @bind.append: $!rhs.bind;
-                 @bind;
-             }
-         }
+            method bind() {
+                my @bind;
+                @bind.append: $!lhs.bind;
+                @bind.append: $!rhs.bind;
+                @bind;
+            }
+        }
 
-         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) returns Clause {
-             self.debug("between with { @values.perl }");
-             my $label           = self.convert($key, :quote);
-             my $and             = self.sqlcase('and');
-             my $placeholder     = self.convert('?');
-             $op                 = self.sqlcase($op);
+        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) returns Clause {
+            self.debug("between with { @values.perl }");
+            my $label           = self.convert($key, :quote);
+            my $and             = self.sqlcase('and');
+            my $placeholder     = self.convert('?');
+            $op                 = self.sqlcase($op);
+    
+            
+            my @clauses;
+            for @values -> $value {
+                my $sub-clause = do given $value {
+                    when Cool {
+                        Expression.new(sql => $placeholder, bind => self.apply-bindtype($key, $value).flat);
+                    }
+                    when Pair {
+                        my $func = $value.key.subst(/^\-/,'');
+                        self.unary-op($func => $value.value);
+                    }
+                }
+                @clauses.append: $sub-clause;
+            }
+    
+            Between.new(lhs => @clauses[0], rhs => @clauses[1], :$label, :$op, :$and);
+        }
      
-             
-             my @clauses;
-             for @values -> $value {
-                 my $sub-clause = do given $value {
-                     when Cool {
-                         Expression.new(sql => $placeholder, bind => self.apply-bindtype($key, $value).flat);
-                     }
-                     when Pair {
-                         my $func = $value.key.subst(/^\-/,'');
-                         self.unary-op($func => $value.value);
-                     }
-                 }
-                 @clauses.append: $sub-clause;
-             }
      
-             Between.new(lhs => @clauses[0], rhs => @clauses[1], :$label, :$op, :$and);
-         }
-     
-     
-         multi sub sql-literal(@l) {
-             @l but SqlLiteral
-         }
-     
-         multi sub sql-literal(+@l) {
-             @l but SqlLiteral
-         }
-     
-         multi sub sql-literal($l) {
-             $l but SqlLiteral
-         }
-     
-         multi method special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) returns Clause {
-             self.special-op: $key, $op, @values;
-         }
+        multi sub sql-literal(@l) {
+            @l but SqlLiteral
+        }
+    
+        multi sub sql-literal(+@l) {
+            @l but SqlLiteral
+        }
+    
+        multi sub sql-literal($l) {
+            $l but SqlLiteral
+        }
+    
+        multi method special-op(Str $key, Str $op where /:i^ ( not \s )? in      $/, *@values) returns Clause {
+            self.special-op: $key, $op, @values;
+        }
      
         class In does Clause {
             has Str $.label is required;
