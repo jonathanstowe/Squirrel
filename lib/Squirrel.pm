@@ -864,29 +864,28 @@ class Squirrel {
             }
         }
 
-        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values where *.elems == 2 ) returns Clause {
+        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? between $/, @values ($left, $right) ) returns Clause {
             self.debug("between with { @values.perl }");
             my $label           = self.convert($key, :quote);
             my $and             = self.sqlcase('and');
-            my $placeholder     = self.convert('?');
             $op                 = self.sqlcase($op);
     
             
-            my @clauses;
-            for @values -> $value {
-                my $sub-clause = do given $value {
-                    when Cool {
-                        Expression.new(sql => $placeholder, bind => self.apply-bindtype($key, $value).flat);
-                    }
-                    when Pair {
-                        my $func = $value.key.subst(/^\-/,'');
-                        self.unary-op($func => $value.value);
-                    }
-                }
-                @clauses.append: $sub-clause;
-            }
-    
-            Between.new(lhs => @clauses[0], rhs => @clauses[1], :$label, :$op, :$and);
+            my $lhs = self.expressionise($key, $left);
+            my $rhs = self.expressionise($key, $right);
+            Between.new(:$lhs, :$rhs, :$label, :$op, :$and);
+        }
+
+        proto method expressionise(|c) { * }
+
+        multi method expressionise(Str $key, Cool $value --> Expression) {
+            my $placeholder     = self.convert('?');
+            Expression.new(sql => $placeholder, bind => self.apply-bindtype($key, $value).flat);
+        }
+
+        multi method expressionise(Str $, Pair $ ( :$key, :$value ) --> Expression) {
+            my $func = $key.subst(/^\-/,'');
+            self.unary-op($func => $value);
         }
      
      
