@@ -923,50 +923,50 @@ class Squirrel {
             }
         }
 
-         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) returns Clause {
-             self.debug("Literal") if @values ~~ SqlLiteral;
-             self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
-             my $label       = self.convert($key, :quote);
-             my $placeholder = self.convert('?');
-             $op             = self.sqlcase($op);
-     
-             my @clauses;
-     
-             for @values -> $value {
-                 my $sub-clause = do given $value {
-                     when SqlLiteral {
-                         my ($sql, @bind) = $value.list;
-                         self.assert-bindval-matches-bindtype(@bind);
-                         Expression.new(:$sql, :@bind);
-                     }
-                     when Stringy|Numeric {
-                         Expression.new(sql => $placeholder, bind => $value);
-                     }
-                     when Pair {
-                         self.debug("pair { $value.perl }");
-                         self.unary-op($value).flat;
-                     }
-     
-                 }
-                 @clauses.append: $sub-clause;
-             }
+        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where { $_ !~~ SqlLiteral && $_.elems > 0 }) returns Clause {
+            self.debug("Literal") if @values ~~ SqlLiteral;
+            self.debug("KEY: $key OP : $op  VALUES { @values.perl }");
+            my $label       = self.convert($key, :quote);
+            my $placeholder = self.convert('?');
+            $op             = self.sqlcase($op);
+    
+            my @clauses;
+    
+            for @values -> $value {
+                my $sub-clause = do given $value {
+                    when SqlLiteral {
+                        my ($sql, @bind) = $value.list;
+                        self.assert-bindval-matches-bindtype(@bind);
+                        Expression.new(:$sql, :@bind);
+                    }
+                    when Stringy|Numeric {
+                        Expression.new(sql => $placeholder, bind => $value);
+                    }
+                    when Pair {
+                        self.debug("pair { $value.perl }");
+                        self.unary-op($value).flat;
+                    }
+    
+                }
+                @clauses.append: $sub-clause;
+            }
 
-             In.new(:$op, :$label, :@clauses);
-         }
-     
-         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) returns Clause {
-             my $sql = $op ~~ m:i/<|w>not<|w>/ ?? $!sqltrue !! $!sqlfalse;
-             Expression.new(:$sql);
-         }
-     
-         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) returns Clause {
-             my $label       = self.convert($key, :quote);
-             $op             = self.sqlcase($op);
-             my ( $sql, @bind) = $values.list;
-             self.assert-bindval-matches-bindtype(@bind);
-             $sql = self.open-outer-paren($sql);
-             Expression.new(sql => "$label $op ( $sql )", :@bind);
-         }
+            In.new(:$op, :$label, :@clauses);
+        }
+    
+        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) returns Clause {
+            my $sql = $op ~~ m:i/<|w>not<|w>/ ?? $!sqltrue !! $!sqlfalse;
+            Expression.new(:$sql);
+        }
+    
+        multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) returns Clause {
+            my $label       = self.convert($key, :quote);
+            $op             = self.sqlcase($op);
+            my ( $sql, @bind) = $values.list;
+            self.assert-bindval-matches-bindtype(@bind);
+            $sql = self.open-outer-paren($sql);
+            Expression.new(sql => "$label $op ( $sql )", :@bind);
+        }
 
         method open-outer-paren(Str $sql is copy) {
             self.debug("got $sql");
