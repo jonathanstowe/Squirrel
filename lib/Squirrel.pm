@@ -191,6 +191,26 @@ class Squirrel {
         }
     }
 
+    class SqlFalse does Clause {
+        method sql(--> Str) {
+            $*SQLFALSE // $!sqlfalse;
+        }
+    }
+
+    sub FALSE( --> SqlFalse) is export {
+        SqlFalse.new
+    }
+
+    class SqlTrue does Clause {
+        method sql(--> Str) {
+            $*SQLTRUE // $!sqltrue;
+        }
+    }
+
+    sub TRUE( --> SqlTrue) is export {
+        SqlTrue.new
+    }
+
     class SqlLiteral does Clause does LiteralValue {
         method list() {
             [$!sql, @!bind.flat];
@@ -692,7 +712,7 @@ class Squirrel {
          }
      
          multi method build-expression(Pair $p ( :$key, :@value where *.elems == 0)) returns Clause {
-             Expression.new( sql => $!sqlfalse);
+             SqlFalse.new;
          }
      
          multi method build-expression(Pair $p ( :$key, Any:U :$value), Logic :$logic) returns Clause {
@@ -832,11 +852,11 @@ class Squirrel {
          }
      
          multi method field-op(Str $key, Str:D $op where $!equality-op, @values where *.elems == 0, Bool :$inner) returns Clause {
-             Expression.new(sql => $!sqlfalse);
+             SqlFalse.new;
          }
      
          multi method field-op(Str $key, Str:D $op where $!inequality-op, @values where *.elems == 0, Bool :$inner) {
-             Expression.new(sql => $!sqltrue);
+             SqlTrue.new;
          }
      
      
@@ -955,8 +975,7 @@ class Squirrel {
         }
     
         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, @values where *.elems == 0) returns Clause {
-            my $sql = $op ~~ m:i/<|w>not<|w>/ ?? $!sqltrue !! $!sqlfalse;
-            Expression.new(:$sql);
+            $op ~~ m:i/<|w>not<|w>/ ?? SqlTrue.new !! SqlFalse.new;
         }
     
         multi method special-op(Str $key, Str $op is copy where /:i^ ( not \s )? in      $/, SqlLiteral $values ) returns Clause {
