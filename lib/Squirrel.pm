@@ -606,6 +606,12 @@ class Squirrel {
         proto method build-expression(|c) { * }
      
      
+        multi method build-expression(Bool $ where { $_ == Bool::False }, $logic? --> Clause) {
+            SqlFalse.new;
+        }
+        multi method build-expression(Bool $ where { $_ == Bool::True }, $logic? --> Clause) {
+            SqlTrue.new;
+        }
         multi method build-expression(@where, Any:U $logic?) returns Clause {
             self.build-expression: @where, :$!logic;
         }
