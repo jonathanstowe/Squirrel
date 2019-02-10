@@ -4,11 +4,11 @@
    "name" : "Squirrel",
    "version" : "0.0.1",
    "resources" : [],
-   "perl" : "6.c",
+   "perl" : "6.*",
    "support" : {
       "source" : "https://github.com/jonathanstowe/Squirrel.git"
    },
-   "meta6" : "0",
+   "meta-version" : "0",
    "source-url" : "https://github.com/jonathanstowe/Squirrel.git",
    "auth" : "github:jonathanstowe",
    "authors" : [
@@ -17,7 +17,7 @@
    "description" : "Simplified abstraction for SQL generation",
    "test-depends" : [],
    "build-depends" : [],
-   "license" : "perl",
+   "license" : "Artistic-2.0",
    "provides" : {
       "Squirrel" : "lib/Squirrel.pm"
    }

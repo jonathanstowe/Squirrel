@@ -33,15 +33,14 @@ superficial similarities, it will probably diverge quite a lot in detail.
 ## Installation
 
 Assuming you have a working Rakudo Perl 6 installation you should be able
-to install this with ```panda``` :
+to install this with ```zef``` :
 
-	panda install Squirrel
+	zef install Squirrel
 
 or from this distribution directory:
 
-	panda install .
+	zef install .
 
-I'm fairly certain it will work with ```zef``` too, I just haven't tested that.
 
 ## Support
 
@@ -56,4 +55,4 @@ Please send a PR or raise an issue at https://github.com/jonathanstowe/Squirrel/
 This is free software, please see the [LICENCE](LICENCE) file in the
 distribution for details.
 
-© Jonathan Stowe 2016, 2017
+© Jonathan Stowe 2016 - 2019
